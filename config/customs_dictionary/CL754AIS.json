@@ -1,0 +1,19 @@
+{"code":"C624","description":"Forma 302","descriptionEng":"Form 302"}
+{"code":"C625","description":"Konosament Rhine","descriptionEng":"Rhine Manifest"}
+{"code":"N235","description":"Wykaz kontener\u00f3w","descriptionEng":"Container list"}
+{"code":"N271","description":"Wykaz opakowa\u0144","descriptionEng":"Packing list"}
+{"code":"N703","description":"Spedytorski list przewozowy","descriptionEng":"House waybill"}
+{"code":"N704","description":"Konosament kapita\u0144ski","descriptionEng":"Master bill of lading"}
+{"code":"N705","description":"Konosament przewozowy","descriptionEng":"Bill of lading"}
+{"code":"N714","description":"Konosament spedytorski","descriptionEng":"House bill of lading"}
+{"code":"N720","description":"List przewozowy CIM","descriptionEng":"Consignment note CIM"}
+{"code":"N722","description":"List drogowy - SMGS","descriptionEng":"Road list - SMGS"}
+{"code":"N730","description":"Drogowy list przewozowy","descriptionEng":"Road consignment note"}
+{"code":"N740","description":"Lotniczy list przewozowy (konosament)","descriptionEng":"Air waybill"}
+{"code":"N741","description":"Kapita\u0144ski lotniczy list przewozowy","descriptionEng":"Master airwaybill"}
+{"code":"N750","description":"Przesy\u0142ki pocztowe (w\u0142\u0105cznie z paczkami)","descriptionEng":"movement by post including parcel post"}
+{"code":"N760","description":"Dokument transportu kombinowanego","descriptionEng":"Multimodal\/combined transport document"}
+{"code":"N785","description":"Manifest cargo","descriptionEng":"Cargo manifest"}
+{"code":"N787","description":"Cedu\u0142a przewozowa (lista za\u0142adunkowa)","descriptionEng":"Bordereau (cargo load list)"}
+{"code":"N952","description":"Karnet TIR","descriptionEng":"TIR Carnet"}
+{"code":"N955","description":"ATA carnet","descriptionEng":"ATA carnet"}

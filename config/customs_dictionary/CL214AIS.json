@@ -1,0 +1,33 @@
+{"code":"C612","description":"zg\u0142oszenie tranzyt unijny wewn\u0119trzny - art. 227 UKC","descriptionEng":"Internal Community transit Declaration \u2014 Article 227 of the Code"}
+{"code":"C651","description":"Administracyjny Dokument Towarzysz\u0105cy AAD (EMCS)","descriptionEng":"AAD - Administrative Accompanying Document (EMCS)"}
+{"code":"C658","description":"awaryjny e-AD - FAD (EMCS)","descriptionEng":"FAD - Fallback e-AD (EMCS)"}
+{"code":"C710","description":"numer INF, arkusza Informacyjnego dla procedur specjalnych","descriptionEng":"Information sheet"}
+{"code":"N235","description":"lista kontenerowa","descriptionEng":"Container list"}
+{"code":"N270","description":"potwierdzenie dostarczenia","descriptionEng":"Delivery note"}
+{"code":"N271","description":"specyfikacja towaru","descriptionEng":"Packing list"}
+{"code":"N325","description":"faktura pro forma","descriptionEng":"Proforma invoice"}
+{"code":"N337","description":"deklaracja czasowego sk\u0142adowania","descriptionEng":"Temporary storage declaration"}
+{"code":"N355","description":"skr\u00f3cona deklaracja przywozowa","descriptionEng":"Entry summary declaration"}
+{"code":"N380","description":"faktura handlowa","descriptionEng":"Commercial invoice"}
+{"code":"N703","description":"spedytorski lotniczy list przewozowy","descriptionEng":"House waybill"}
+{"code":"N704","description":"zbiorczy morski list przewozowy","descriptionEng":"Master bill of lading"}
+{"code":"N705","description":"morski list przewozowy","descriptionEng":"Bill of lading"}
+{"code":"N714","description":"konosament spedytorski","descriptionEng":"House bill of lading"}
+{"code":"N720","description":"kolejowy list przewozowy - CIM","descriptionEng":"Consignment note CIM"}
+{"code":"N722","description":"list kolejowy - SMGS","descriptionEng":"Road list SMGS"}
+{"code":"N730","description":"drogowy list przewozowy","descriptionEng":"Road consignment note"}
+{"code":"N740","description":"lotniczy list przewozowy","descriptionEng":"Air waybill"}
+{"code":"N741","description":"zbiorczy lotniczy list przewozowy","descriptionEng":"Master air waybill"}
+{"code":"N750","description":"przesy\u0142ka pocztowa z paczkami w\u0142\u0105cznie","descriptionEng":"Movement by post including parcel post"}
+{"code":"N760","description":"dokument transportu multimodalnego\/kombinowanego","descriptionEng":"Multimodal\/combined transport document"}
+{"code":"N785","description":"manifest cargo","descriptionEng":"Cargo manifest"}
+{"code":"N787","description":"bordereau (lista za\u0142adunkowa)","descriptionEng":"Bordereau (cargo load list)"}
+{"code":"N820","description":"zg\u0142oszenie tranzytowe T","descriptionEng":"Transit declaration \"T\""}
+{"code":"N821","description":"zg\u0142oszenie tranzyt unijny zewn\u0119trzny\/tranzyt wsp\u00f3lny, T1","descriptionEng":"External Community transit declaration \/ common transit, T1"}
+{"code":"N822","description":"zg\u0142oszenie tranzyt unijny wewn\u0119trzny T2","descriptionEng":"Internal Community transit declaration T2"}
+{"code":"N825","description":"dokument T2L","descriptionEng":"T2L document"}
+{"code":"N952","description":"karnet TIR","descriptionEng":"TIR carnet"}
+{"code":"N955","description":"karnet ATA","descriptionEng":"ATA carnet"}
+{"code":"NCLE","description":"odniesienie\/data wprowadzenia do rejetru zg\u0142aszaj\u0105cego","descriptionEng":"Reference\/date of entry in the declarant\u2019s records"}
+{"code":"NMNS","description":"manifest cargo - procedura uproszczona","descriptionEng":"Cargo manifest \u2014 simplified procedure"}
+{"code":"NMRN","description":"MRN zg\u0142oszenia\/powiadomienia","descriptionEng":"Declaration \/ notification MRN"}

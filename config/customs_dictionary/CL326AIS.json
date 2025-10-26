@@ -1,0 +1,7 @@
+{"code":"T","description":"Kod pocztowy","descriptionEng":"Postal code"}
+{"code":"U","description":"UN\/LOCODE (system geokodowania zarz\u0105dzany przez Europejsk\u0105 Komisj\u0119 Gospodarcz\u0105, stworzony przez Organizacj\u0119 Narod\u00f3w Zjednoczonych)","descriptionEng":"UN\/LOCODE"}
+{"code":"V","description":"Identyfikator urz\u0119du celnego","descriptionEng":"Customs office identifier"}
+{"code":"W","description":"wsp\u00f3\u0142rz\u0119dne GPS","descriptionEng":"GPS coordinates"}
+{"code":"X","description":"Numer EORI","descriptionEng":"EORI number"}
+{"code":"Y","description":"Numer pozwolenia","descriptionEng":"Authorisation number"}
+{"code":"Z","description":"Otwarte pole tekstowe","descriptionEng":"Free text"}
