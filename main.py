@@ -798,9 +798,79 @@ class MainWindow(QMainWindow):
                 try:
                     input_file = pd.read_excel(file_path, dtype={'TrackingNumber': str, 'ConsigneeNameID': str,
                                                                  'ConsigneeName': str, 'HSCode': str})
+
+                    # 如果存在 DSK（忽略大小写）改成 Dsk
+                    for col in input_file.columns:
+                        if col.lower() == "dsk":
+                            input_file = input_file.rename(columns={col: "Dsk"})
+                            break
+
                     # 将 nan 值替换为空字符串
                     input_file.fillna('', inplace=True)
                     input_file = input_file.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+
+                    # Check goodsitem previous document
+                    if input_information.get("goodsitem previous document"):
+                        for item in input_information["goodsitem previous document"]:
+                            if str(item.get("reference number", "")).strip() == "1":
+                                if "Dsk" not in input_file.columns:
+                                    self.show_error(
+                                        "goodsitem previous document default reading rule requires the Dsk column. "
+                                        "Please remove related content if missing.")
+                                    return False
+                                if input_file["Dsk"].replace('', pd.NA).isna().any():
+                                    self.show_error(
+                                        "goodsitem previous document default reading rule requires the Dsk column, "
+                                        "but it is empty. Please remove related content.")
+                                    return False
+
+                    # Check goodsitem supporting document & goodshipment supporting document
+                    for section in ["goodsitem supporting document", "goodshipment supporting document"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                if str(item.get("reference number", "")).strip() == "1":
+                                    if "InvoiceNumber" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} default reading rule requires the InvoiceNumber column. "
+                                            f"Please remove related content if missing.")
+                                        return False
+                                    if input_file["InvoiceNumber"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} default reading rule requires the InvoiceNumber column, "
+                                            f"but it is empty. Please remove related content.")
+                                        return False
+
+                    # Check goodshipment/goodsitem transport document reference=1
+                    for section in ["goodshipment transport document", "goodsitem transport document"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                if str(item.get("reference number", "")).strip() == "1":
+                                    if "AirWayBill" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} default reading rule requires the AirWayBill column. Please "
+                                            f"remove related content if missing.")
+                                        return False
+                                    if input_file["AirWayBill"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} default reading rule requires the AirWayBill column, but it "
+                                            f"is empty. Please remove related content.")
+                                        return False
+
+                    # Check goodshipment/goodsitem transport document reference=2
+                    for section in ["goodshipment transport document", "goodsitem transport document"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                if str(item.get("reference number", "")).strip() == "2":
+                                    if "Box Number" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} default reading rule requires the Box Number column. Please "
+                                            f"remove related content if missing.")
+                                        return False
+                                    if input_file["Box Number"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} default reading rule requires the Box Number column, but it "
+                                            f"is empty. Please remove related content.")
+                                        return False
                 except Exception as e:
                     self.show_error("No such file.")
                     return False
