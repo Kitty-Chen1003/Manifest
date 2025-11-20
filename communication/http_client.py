@@ -1,4 +1,8 @@
 import json
+import sqlite3
+import time
+from collections import defaultdict
+
 import requests
 from utils import db, signature
 import xml.dom.minidom
@@ -199,44 +203,80 @@ def synchronize_data(token, username):
 
         # 发送 GET 请求到 synchronize_data 路由
         response = requests.get(url + '/generate/synchronize_data', json=data, headers=headers)
+        response = requests.post(url + '/generate/synchronize_data', json=data, headers=headers, timeout=900)
 
-        # 检查响应状态码
-        if response.json().get('state') == 200:
-            try:
-                data = response.json().get('data')
-                # 检查数据中是否包含所需的字段
-                if all(key in data for key in ['MainExcelTable', 'SubExcelTable', 'SubExcelData', 'SubXMLData', 'SignatureForm']):
-                    main_excel_data = data['MainExcelTable']
-                    sub_excel_data = data['SubExcelTable']
-                    sub_excel_data_table = data['SubExcelData']
-                    sub_xml_data = data['SubXMLData']
-                    signature_data = data['SignatureForm']
+        if response.status_code != 200:
+            return False, f"HTTP {response.status_code}"
 
-                    # 分别插入每张表的数据
-                    db.insert_main_excel_table(main_excel_data)
-                    db.insert_sub_excel_table(sub_excel_data)
-                    db.insert_sub_excel_data(sub_excel_data_table)
-                    db.insert_sub_xml_data(sub_xml_data, username)
-                    db.synchronize_signature_form(signature_data)
+        try:
+            json_result = response.json()
 
-                    print("Data synchronized successfully.")
-                    return True
-                else:
-                    print("Error: Missing expected data fields in the response.")
-                    return False
-            except ValueError:
-                # 捕获 JSON 解析错误
-                print("Error: Response is not valid JSON.")
-                return False
-        else:
-            # 如果状态码不是 200，打印详细的错误信息
-            print(f"Failed to synchronize data: {response.json().get('state')}")
+        except (ValueError, requests.JSONDecodeError):
+            print("Error: Response is not valid JSON.")
+            return False, "Error: Response is not valid JSON."
+
+        if json_result.get('state') != 200:
+            print(f"Failed to synchronize data: {json_result.get('state')}")
             print(f"Response: {response.text}")  # 打印错误响应内容
             return False
+            return False, f"Failed to synchronize data {json_result.get('state')}"
+
+        # 检查数据中是否包含所需的字段
+        data = json_result.get('data', {})
+        required_keys = ['MainExcelTable', 'SubExcelTable', 'SubExcelData', 'SubXMLData', 'SignatureForm']
+        if not all(key in data for key in required_keys):
+            print("Error: Missing expected data fields in the response.")
+            return False, "Error: Missing expected data fields in the response."
+
+        bulk_insert(data, username)
+
+        # main_excel_data = data['MainExcelTable']
+        # sub_excel_data = data['SubExcelTable']
+        # sub_excel_data_table = data['SubExcelData']
+        # sub_xml_data = data['SubXMLData']
+        # signature_data = data['SignatureForm']
+        #
+        # # 分别插入每张表的数据
+        # db.insert_main_excel_table(main_excel_data)
+        # db.insert_sub_excel_table(sub_excel_data)
+        # db.insert_sub_excel_data(sub_excel_data_table)
+        # db.insert_sub_xml_data(sub_xml_data, username)
+        # db.synchronize_signature_form(signature_data)
+        print("Data synchronized successfully.")
+        return True, "Data synchronized successfully."
+
     except requests.exceptions.RequestException as e:
         # 捕获请求相关的异常，如网络连接问题、超时等
         print(f"Request failed: {e}")
-        return False
+        return False, f"Request failed: {e}"
+
+    except Exception as e:
+        return False, f"Error: {e}"
+
+
+def bulk_insert(data, username):
+    db_path = get_resource_path("db/manifest.db")
+    """批量插入数据库，开启事务"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("BEGIN")
+
+        db.insert_main_excel_table(cursor, data.get('MainExcelTable', []))
+        db.insert_sub_excel_table(cursor, data.get('SubExcelTable', []))
+        db.insert_sub_excel_data(cursor, data.get('SubExcelData', []))
+        db.insert_sub_xml_data_login(cursor, data.get('SubXMLData', []), username)
+        db.synchronize_signature_form_login(cursor, data.get('SignatureForm', []))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(f"批量插入失败: {e}")
+        raise
+    finally:
+        conn.close()
 
 
 # 上传 Excel 数据

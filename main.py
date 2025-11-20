@@ -1053,11 +1053,11 @@ class MainWindow(QMainWindow):
             self.token = login_dialog.token
             self.exit_login.setText('Exit ' + self.username)
             if self.token:
-                return_synchronize_data = http_client.synchronize_data(self.token, self.username)
-                if return_synchronize_data:
-                    QMessageBox.warning(self, "Success", 'Synchronize data succsssfully!')
+                success, msg = http_client.synchronize_data(self.token, self.username)
+                if success:
+                    QMessageBox.information(self, "Success", msg)
                 else:
-                    QMessageBox.warning(self, "failure", 'Synchronize data failingly!')
+                    QMessageBox.warning(self, "Failure", msg)
 
                 self.list_time_out_ids = db.get_sequences_older_than_30_days(self.username)
                 if len(self.list_time_out_ids['main_table_ids']) + len(self.list_time_out_ids['xml_table_ids']) > 0:
