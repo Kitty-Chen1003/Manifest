@@ -391,10 +391,16 @@ def check_status(token, data):
         response.raise_for_status()  # 如果响应状态码是 4xx 或 5xx，将引发 httpsError
 
         # 假设服务器返回的 JSON 格式是一个列表，里面包含多个字典
-        data_lists = response.json().get('data').get('data')
-        signature_datas = response.json().get('data').get('signatureInfo')
-        if data_lists:
-            grouped_dict = {}
+        resp_json = response.json()
+        state = resp_json.get('state')
+        payload = resp_json.get('data', {})
+        data_lists = payload.get('data')
+        signature_datas = payload.get('signatureInfo')
+
+        if not data_lists:
+            return state
+
+        grouped_dict = defaultdict(list)
 
         # 按 sub_id 分组
         for item in data_lists:
@@ -407,9 +413,14 @@ def check_status(token, data):
         # 转换为二维列表
         data_lists = list(grouped_dict.values())
 
-            # 存储数据到数据库并确认消息
-            if response.json().get('state') == 200:
-                db.synchronize_signature_form(signature_datas)
+        # ----- Step 4: 数据库操作 -----
+
+        # 存储数据到数据库并确认消息
+        if state == 200:
+            db_path = get_resource_path("db/manifest.db")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            start_sub = time.perf_counter()
 
             try:
                 db.synchronize_signature_form_login(cursor, signature_datas)
