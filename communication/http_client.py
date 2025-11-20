@@ -202,7 +202,7 @@ def synchronize_data(token, username):
         headers = {'Authorization': f'Bearer {token}'}
 
         # 发送 GET 请求到 synchronize_data 路由
-        response = requests.get(url + '/generate/synchronize_data', json=data, headers=headers, timeout=900)
+        response = requests.post(url + '/generate/synchronize_data', json=data, headers=headers, timeout=900)
 
         if response.status_code != 200:
             return False, f"HTTP {response.status_code}"
