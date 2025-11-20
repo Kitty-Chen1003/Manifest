@@ -269,48 +269,57 @@ def store_excel_data(main_table_data, sub_tables_data, sub_tables_additional_dat
 
 
 # 存储回复文件信息
-def store_xml_data(main_table_id, sub_table_id, type_value, xml_json_data, event_time, direction, username, cr,
+def store_xml_data(cursor, main_table_id, sub_table_id, type_value, xml_json_data, event_time, direction, username, cr,
                    message_id):
-    conn = None
+    # conn = None
     try:
-        # 连接到数据库
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # # 连接到数据库
+        # conn = sqlite3.connect(db_path)
+        # cursor = conn.cursor()
 
         # 序列化 XML JSON 数据
-        xml_json_str = json.dumps(xml_json_data)
+        xml_json_str = json.dumps(xml_json_data, ensure_ascii=False, sort_keys=True)
 
         # 插入 XML 数据到 SubXMLData 表
+        # cursor.execute(
+        #     '''INSERT INTO SubXMLData
+        #        (main_table_id, sub_table_id, type, xml_json_data, event_time, username, direction, CR, messageID)
+        #        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        #     (main_table_id, sub_table_id, type_value, xml_json_str, event_time, username, direction, cr, message_id)
+        # )
+
         cursor.execute(
-            '''INSERT INTO SubXMLData 
+            '''INSERT OR REPLACE INTO SubXMLData 
                (main_table_id, sub_table_id, type, xml_json_data, event_time, username, direction, CR, messageID) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (main_table_id, sub_table_id, type_value, xml_json_str, event_time, username, direction, cr, message_id)
         )
-
-        # 提交事务
-        conn.commit()
+        # # 提交事务
+        # conn.commit()
         print("XML 数据存储成功")
 
     except sqlite3.DatabaseError as e:
-        if conn:
-            conn.rollback()  # 发生数据库异常时回滚事务
+        # if conn:
+        #     conn.rollback()  # 发生数据库异常时回滚事务
         logging.error(f"数据库错误: {e}")
         print(f"数据库错误: {e}")
+        raise
     except json.JSONDecodeError as e:
-        if conn:
-            conn.rollback()
+        # if conn:
+        #     conn.rollback()
         logging.error(f"JSON 解码错误: {e}")
         print(f"JSON 解码错误: {e}")
+        raise
     except Exception as e:
-        if conn:
-            conn.rollback()
+        # if conn:
+        #     conn.rollback()
         logging.error(f"未知错误: {e}")
         print(f"未知错误: {e}")
-    finally:
-        # 关闭数据库连接
-        if conn:
-            conn.close()
+        raise
+    # finally:
+    #     # 关闭数据库连接
+    #     if conn:
+    #         conn.close()
 
 
 # 读取 MainExcelTable 中所有的信息
@@ -724,12 +733,13 @@ def update_main_table(main_id, new_creation_time=None, new_state=None, new_data=
 # 根据主id修改 SubExcelTable 中的信息
 def update_sub_table(sub_id, new_main_id=None, new_event_time=None, new_state=None,
                      new_deleted_at=None, new_username=None, new_IOSS=None,
-                     new_TrackingNumber=None, new_lrn=None, new_sub_table_data=None):
-    conn = None
+                     new_TrackingNumber=None, new_lrn=None, new_sub_table_data=None, cursor=None):
+    internal_conn = None
     try:
-        # 连接到数据库
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        if cursor is None:
+            # 连接到数据库
+            internal_conn = sqlite3.connect(db_path)
+            cursor = internal_conn.cursor()
 
         # 用于更新的列和值
         updates = []
@@ -762,7 +772,7 @@ def update_sub_table(sub_id, new_main_id=None, new_event_time=None, new_state=No
             params.append(new_lrn)
         if new_sub_table_data is not None:
             updates.append("sub_table_data = ?")
-            params.append(json.dumps(new_sub_table_data))
+            params.append(json.dumps(new_sub_table_data, ensure_ascii=False, sort_keys=True))
 
         # 如果有需要更新的字段
         if updates:
@@ -771,7 +781,9 @@ def update_sub_table(sub_id, new_main_id=None, new_event_time=None, new_state=No
 
             # 执行更新操作
             cursor.execute(sql_query, params)
-            conn.commit()
+            if internal_conn:
+                internal_conn.commit()  # 内部连接时才提交
+
             logging.info(f"子表 ID {sub_id} 更新成功：{', '.join(updates)}")
         else:
             logging.warning(f"未提供任何更新字段，子表 ID {sub_id} 未进行任何更新操作。")
@@ -784,8 +796,8 @@ def update_sub_table(sub_id, new_main_id=None, new_event_time=None, new_state=No
         print(f"未知错误: {e}")
     finally:
         # 确保数据库连接关闭
-        if conn:
-            conn.close()
+        if internal_conn:
+            internal_conn.close()
 
 
 # 根据主id修改 SubExcelData 中的信息
@@ -2125,35 +2137,21 @@ def get_id_ioss_tracking_number_by_main_id(main_ids):
     :param main_ids: 由 main_id 组成的列表
     :return: 返回包含三个列表：[sequence_list, ioss_list, tracking_number_list]
     """
-    conn = None
-    cursor = None
     try:
-        # 连接到 SQLite 数据库
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # 构造占位符字符串，数量与 main_ids 列表长度相同, 查询 sequence, IOSS 和 TrackingNumber
+        query = f"""
+            SELECT sequence, IOSS, TrackingNumber
+            FROM SubExcelTable
+            WHERE main_id IN ({','.join('?' for _ in main_ids)})
+        """
 
-        # 构造占位符字符串，数量与 main_ids 列表长度相同
-        placeholders = ', '.join('?' for _ in main_ids)
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(query, main_ids)
+            results = cursor.fetchall()
 
-        # 查询 sequence, IOSS 和 TrackingNumber
-        cursor.execute(f'''
-            SELECT sequence, IOSS, TrackingNumber 
-            FROM SubExcelTable 
-            WHERE main_id IN ({placeholders})
-        ''', main_ids)
-
-        # 获取查询结果
-        results = cursor.fetchall()
-
-        # 分别存储到三个列表中
-        sequence_list = []
-        ioss_list = []
-        tracking_number_list = []
-
-        for row in results:
-            sequence_list.append(row[0])  # 第一个字段 sequence
-            ioss_list.append(row[1])  # 第二个字段 IOSS
-            tracking_number_list.append(row[2])  # 第三个字段 TrackingNumber
+        sequence_list = [r[0] for r in results]
+        ioss_list = [r[1] for r in results]
+        tracking_number_list = [r[2] for r in results]
 
         logging.info(f"成功获取 {len(results)} 条数据，main_ids: {main_ids}")
 
@@ -2167,10 +2165,6 @@ def get_id_ioss_tracking_number_by_main_id(main_ids):
         # 捕获其他未知错误
         logging.error(f"发生未知错误: {e}")
         return None
-    finally:
-        # 确保数据库连接关闭
-        if conn:
-            conn.close()
 
 
 # 发送zc415的时候同步MainExcelTable，SubExcelTable和SubExcelData三个数据表的数据到服务器
@@ -2661,15 +2655,87 @@ def get_airwaybill_ioss_trackingnumber(sub_sequence):
             conn.close()
 
 
-def get_sub_table_data_by_id(sub_table_id):
+# --------------------------------------------------
+# 批量查询
+# --------------------------------------------------
+def batch_get_sub_table_data_by_ids_chunked(cursor, id_list, chunk_size=200):
+    """
+    分批查询多个 sub_id，返回 {sub_id: [records...]}
+
+    内部处理逻辑完全与单条查询一致（因为全部使用 parse_subxml_row）
+    """
+    if not id_list:
+        return {}
+
+    result_map = defaultdict(list)
+    ids = list(id_list)
+
+    try:
+        for i in range(0, len(ids), chunk_size):
+            batch_ids = ids[i:i + chunk_size]
+            placeholders = ",".join("?" for _ in batch_ids)
+
+            sql = f'''
+                SELECT sub_table_id, main_table_id, type, event_time, xml_json_data, direction, CR, messageID
+                FROM SubXMLData
+                WHERE sub_table_id IN ({placeholders}) AND deleted_at IS NULL
+            '''
+
+            cursor.execute(sql, batch_ids)
+            rows = cursor.fetchall()
+
+            for row in rows:
+                rec = parse_subxml_row(row)  # <-- 与单条查询完全一致
+                if rec:
+                    result_map[rec["sub_id"]].append(rec)
+
+        return dict(result_map)
+
+    except Exception as e:
+        logging.error(f"批量查询 SubXMLData 时发生错误: {e}")
+        return {}
+
+
+# --------------------------------------------------
+# 统一的 row -> dict 转换函数（单条 & 批量都用它）
+# --------------------------------------------------
+def parse_subxml_row(row):
+    """
+    将 SubXMLData 的一行 row 转换成结构化字典
+    与单条查询 get_sub_table_data_by_id 的逻辑完全一致
+    """
+    if not row:
+        return None
+
+    # row[4] = xml_json_data
+    try:
+        json_data = json.loads(row[4]) if row[4] else None
+    except json.JSONDecodeError:
+        logging.warning(f"JSON 解析错误（保留原始字符串）: {row[4]}")
+        json_data = row[4]
+
+    return {
+        "sub_id": row[0],
+        "main_id": row[1],
+        "type": row[2],
+        "event_time": row[3],
+        "json_data": json_data,
+        "direction": row[5],
+        "CR": row[6],
+        "messageID": row[7],
+    }
+
+
+def get_sub_table_data_by_id(cursor, sub_table_id):
     """
     根据 sub_table_id 查询 SubXMLData 表中的数据，返回指定格式的字典列表，并将 json_data 转换为 JSON 格式。
     :param sub_table_id: 子表的 ID，用于查询数据。如果为 None，则查询 sub_table_id IS NULL 的记录。
+    :param cursor: sqlite3.Cursor 对象
     :return: 包含查询结果的字典列表
     """
-    conn = sqlite3.connect(db_path)
+    # conn = sqlite3.connect(db_path)
     try:
-        cursor = conn.cursor()
+        # cursor = conn.cursor()
 
         # 动态构造 SQL 查询条件
         if sub_table_id is None:
@@ -2693,13 +2759,15 @@ def get_sub_table_data_by_id(sub_table_id):
         # 构造结果列表
         result = []
         for row in rows:
-            try:
-                # 尝试将 json_data 转换为 JSON 对象
-                json_data = json.loads(row[4]) if row[4] else None
-            except json.JSONDecodeError:
-                # 如果转换失败，记录错误并存储原始数据
-                print(f"JSON 解析错误: {row[4]}")
-                json_data = row[4]
+            json_data = None
+            if row[4]:
+                try:
+                    # 尝试将 json_data 转换为 JSON 对象
+                    json_data = json.loads(row[4])
+                except json.JSONDecodeError:
+                    # 如果转换失败，记录错误并存储原始数据
+                    print(f"JSON 解析错误: {row[4]}")
+                    json_data = row[4]
 
             result.append({
                 "sub_id": row[0],
@@ -2714,10 +2782,10 @@ def get_sub_table_data_by_id(sub_table_id):
 
         return result
     except Exception as e:
-        print(f"查询时发生错误: {e}")
+        print(f"查询 SubXMLData 时发生错误: {e}")
         return []
-    finally:
-        conn.close()
+    # finally:
+    #     conn.close()
 
 
 def get_account_data(username=None, data_types=None, event_time=None):

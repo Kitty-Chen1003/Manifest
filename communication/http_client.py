@@ -202,7 +202,6 @@ def synchronize_data(token, username):
         headers = {'Authorization': f'Bearer {token}'}
 
         # 发送 GET 请求到 synchronize_data 路由
-        response = requests.get(url + '/generate/synchronize_data', json=data, headers=headers)
         response = requests.post(url + '/generate/synchronize_data', json=data, headers=headers, timeout=900)
 
         if response.status_code != 200:
@@ -218,7 +217,6 @@ def synchronize_data(token, username):
         if json_result.get('state') != 200:
             print(f"Failed to synchronize data: {json_result.get('state')}")
             print(f"Response: {response.text}")  # 打印错误响应内容
-            return False
             return False, f"Failed to synchronize data {json_result.get('state')}"
 
         # 检查数据中是否包含所需的字段
@@ -384,8 +382,9 @@ def upload_excel_data(token, data, file_path, password, signature_information):
 
 # 检查状态
 def check_status(token, data):
-    username = data['username']
+    username = data.get('username')
     headers = {'Authorization': f'Bearer {token}'}
+
     try:
         # 发送请求，携带 active_main_ids
         response = requests.get(url + '/generate/check_status', headers=headers, json=data)
@@ -397,24 +396,42 @@ def check_status(token, data):
         if data_lists:
             grouped_dict = {}
 
-            # 按 sub_id 分组
-            for item in data_lists:
-                sub_id = item.get("sub_id")
-                if sub_id not in grouped_dict:
-                    grouped_dict[sub_id] = []
-                grouped_dict[sub_id].append(item)
+        # 按 sub_id 分组
+        for item in data_lists:
+            # sub_id = item.get("sub_id")
+            # if sub_id not in grouped_dict:
+            #     grouped_dict[sub_id] = []
+            # grouped_dict[sub_id].append(item)
+            grouped_dict[item.get("sub_id")].append(item)
 
-            # 转换为二维列表
-            data_lists = list(grouped_dict.values())
+        # 转换为二维列表
+        data_lists = list(grouped_dict.values())
 
             # 存储数据到数据库并确认消息
             if response.json().get('state') == 200:
                 db.synchronize_signature_form(signature_datas)
 
+            try:
+                db.synchronize_signature_form_login(cursor, signature_datas)
+
+                all_sub_ids = set()
+                has_null_sub_ids = False
                 for data_list in data_lists:
                     sub_id = data_list[0].get('sub_id')
-                    sub_id_datas = db.get_sub_table_data_by_id(sub_id)  # 获取本地已有数据
+                    if sub_id is None:
+                        has_null_sub_ids = True
+                    else:
+                        all_sub_ids.add(sub_id)
+                sub_id_map = db.batch_get_sub_table_data_by_ids_chunked(cursor, all_sub_ids, chunk_size=200)
 
+                if has_null_sub_ids:
+                    null_sub_data = db.get_sub_table_data_by_id(cursor, None)
+                    sub_id_map[None] = null_sub_data  # 或者使用 '__NULL__' 作为 key
+
+                for data_list in data_lists:
+                    sub_id = data_list[0].get('sub_id')
+                    # sub_id_datas = db.get_sub_table_data_by_id(cursor, sub_id)  # 获取本地已有数据
+                    sub_id_datas = sub_id_map.get(sub_id, [])
                     # 确保 sub_id_datas 中的字段和格式正确，转换为元组集合
                     existing_data_set = {
                         (
@@ -452,11 +469,21 @@ def check_status(token, data):
                             json.dumps(json_data, sort_keys=True),  # 转换为字符串并排序键
                         )
                         if data_tuple not in existing_data_set:
-                            db.store_xml_data(main_id, sub_id, type_value, json_data, event_time, direction, username,
+                            db.store_xml_data(cursor, main_id, sub_id, type_value, json_data, event_time, direction, username,
                                               cr, message_id)
-                            db.update_sub_table(sub_id, new_event_time=event_time)
+                            db.update_sub_table(sub_id, new_event_time=event_time, cursor=cursor)
 
-        return response.json().get('state')
+                conn.commit()
+
+            except Exception as e:
+                conn.rollback()
+                print(f"数据同步失败: {e}")
+                raise
+            finally:
+                cursor.close()
+                conn.close()
+
+        return state
 
     except requests.exceptions.HTTPError as https_err:
         print(f"https error occurred: {https_err}")

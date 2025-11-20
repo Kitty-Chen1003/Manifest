@@ -530,12 +530,28 @@ class MainWindow(QMainWindow):
         self.upd_table.setColumnCount(len(self.df_upd.columns))
         self.upd_table.setHorizontalHeaderLabels(self.df_upd.columns)
 
-        for row in range(len(self.df_upd)):
-            for col in range(len(self.df_upd.columns)):
-                item_text = str(self.df_upd.iloc[row, col]) if pd.notna(self.df_upd.iloc[row, col]) else ''
-                item = QTableWidgetItem(item_text)
+        self.upd_table.setUpdatesEnabled(False)
+        self.upd_table.blockSignals(True)
+        self.upd_table.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.upd_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+
+        values = self.df_upd.values
+        rows, cols = values.shape
+
+        for row in range(rows):
+            for col in range(cols):
+                # item_text = str(self.df_upd.iloc[row, col]) if pd.notna(self.df_upd.iloc[row, col]) else ''
+                # item = QTableWidgetItem(item_text)
+                val = "" if pd.isna(values[row][col]) else str(values[row][col])
+                item = QTableWidgetItem(val)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
                 self.upd_table.setItem(row, col, item)
+
+        # 恢复 UI 更新
+        self.upd_table.blockSignals(False)
+        self.upd_table.setUpdatesEnabled(True)
+        self.upd_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.upd_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
 
     def show_main_table(self):
         self.flag = 0
