@@ -121,11 +121,11 @@ text_all_line_edits = ["PL443020", "523026291", "A", "", "PL521398303500000", ""
                        "", "B", "Y",
                        "", "PLTST441000200001", "", "", "", "", "", "", "", "",
                        "", "", "", "",
-                       [], [],
+                       [{'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}], [],
                        [{'reference number': '1', 'type(CL213)': 'N380'}], [],
                        [{'reference number': '1', 'type(CL754)': 'N740'}, {'reference number': '2', 'type(CL754)': 'N703'}],
                        [{'role(CL149)': 'FR5'}], "", "",
-                       [{'additional procedure(CL457)': 'C07'}, {'additional procedure(CL457)': 'F48'}], [{'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}], [], [], [],
+                       [{'additional procedure(CL457)': 'C07'}, {'additional procedure(CL457)': 'F48'}], [], [], [], [],
                        []]
 
 # text_all_line_edits = ["PL443020", "523026291", "A", "", "PL521398303500000", "", "", "", "",

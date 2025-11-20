@@ -1506,7 +1506,9 @@ if __name__ == '__main__':
          'longitude': '', 'EORI Number': '', 'address street and number': '', 'address postcode': '',
          'address city': '', 'address country': '', 'postcode address postcode': '',
          'postcode address house number': '', 'postcode address country': '', 'goodshipment referenceNumberUCR': '',
-         'goodshipment previous document': [],
+         'goodshipment previous document': [
+            {'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}
+         ],
          'goodshipment additional information': [],
          'goodshipment supporting document': [{'reference number': '1', 'type(CL213)': 'N380'}],
          'goodshipment additional reference': [],
@@ -1515,9 +1517,7 @@ if __name__ == '__main__':
          'goodshipment transport costs to destination currency': '',
          'goodshipment transport costs to destination amount': '',
          'goodsitem additional procedure': [{'additional procedure(CL457)': 'C07'},
-                                            {'additional procedure(CL457)': 'F48'}], 'goodsitem previous document': [
-            {'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}
-        ],
+                                            {'additional procedure(CL457)': 'F48'}], 'goodsitem previous document': [],
          'goodsitem additional information': [], 'goodsitem supporting document': [],
          'goodsitem additional reference': [], 'goodsitem transport document': []}
     b = [{'InvoiceNumber': 'CN00000000136', 'GoodsItemNumber': 1057, 'HSCode': 940199, 'Total Price': 0.8,

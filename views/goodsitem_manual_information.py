@@ -294,7 +294,9 @@ def main():
     #                             'goodshipment additional reference': [],
     #                             'goodshipment transport document': [
     #                                 {'reference number': '111-12345678', 'type(CL754)': 'N741'}]}
-    goodshipment_information = {'goodshipment previous document': [],
+    goodshipment_information = {'goodshipment previous document': [
+        {'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}
+    ],
                                 'goodshipment additional information': [],
                                 'goodshipment supporting document': [
                                     {'reference number': '1', 'type(CL213)': 'N380'}
@@ -307,7 +309,7 @@ def main():
     #                          'goodsitem supporting document': [],
     #                          'goodsitem additional reference': [{'reference number': '123123', 'type(CL380)': 'Y006'}],
     #                          'goodsitem transport document': []}  # 示例输入信息字典
-    goodsitem_information = {'goodsitem previous document': [{'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}],
+    goodsitem_information = {'goodsitem previous document': [],
                              'goodsitem additional information': [{'code(CL239)': '00700', 'text': '123123'}],
                              'goodsitem supporting document': [],
                              'goodsitem additional reference': [{'reference number': '123123', 'type(CL380)': 'Y006'}],

@@ -799,15 +799,28 @@ class MainWindow(QMainWindow):
                     input_file = pd.read_excel(file_path, dtype={'TrackingNumber': str, 'ConsigneeNameID': str,
                                                                  'ConsigneeName': str, 'HSCode': str})
 
-                    # 如果存在 DSK（忽略大小写）改成 Dsk
+                    # === 列名标准化处理 ===
+                    normalized_columns = {}
                     for col in input_file.columns:
-                        if col.lower() == "dsk":
-                            input_file = input_file.rename(columns={col: "Dsk"})
-                            break
+                        col_lower = col.lower()
+                        if col_lower == "dsk":
+                            normalized_columns[col] = "Dsk"
+                        elif col_lower in ["invoice number", "invoicenumber"]:
+                            normalized_columns[col] = "InvoiceNumber"
+                    input_file.rename(columns=normalized_columns, inplace=True)
 
                     # 将 nan 值替换为空字符串
                     input_file.fillna('', inplace=True)
                     input_file = input_file.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+
+                    # === 第一步：对 input_file 扫描 TrackingNumber 的首次出现行号 ===
+                    tracking_index_map = {}
+                    next_idx = 1
+                    for _, row in input_file.iterrows():
+                        tn = str(row.get("TrackingNumber", "")).strip()
+                        if tn and tn not in tracking_index_map:
+                            tracking_index_map[tn] = next_idx
+                            next_idx += 1
 
                     # Check goodsitem previous document
                     if input_information.get("goodsitem previous document"):
@@ -942,6 +955,9 @@ class MainWindow(QMainWindow):
                         for fix_key, new_key in zip(self.list_fixed_key, list_new_keys):
                             if new_key in row:
                                 new_data_row[fix_key] = row[new_key]
+
+                        tn = str(row.get("TrackingNumber", "")).strip()
+                        new_data_row["TrackingNumberIndex"] = tracking_index_map.get(tn, -1)
                         new_data_rows.append(new_data_row)
                     list_data_rows.append(new_data_rows)
                 sub_tables_additional_data = [input_information['goodsitem previous document'],

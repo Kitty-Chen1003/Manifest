@@ -377,14 +377,11 @@ class InputSADInformationDialog(QDialog):
         self.all_line_edits[15].textChanged.connect(self.qualifier_of_identification_changed)
 
         self.prohibit_select(29)
-        self.prohibit_select(30)
 
-        # for i in range(30, 35):
-        for i in range(31, 35):
+        for i in range(30, 35):
             self.all_line_edits[i].textChanged.connect(
                 lambda text, idx=i: self.goodshipment_document_changed(text, idx))
-        # for i in range(39, 44):
-        for i in range(40, 44):
+        for i in range(39, 44):
             self.all_line_edits[i].textChanged.connect(
                 lambda text, idx=i: self.goodsitem_document_changed(text, idx))
 
