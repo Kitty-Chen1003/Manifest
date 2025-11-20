@@ -6,6 +6,15 @@ from collections import defaultdict
 import uuid
 import logging
 from utils.path import get_resource_path
+import hashlib
+import json
+import time
+
+
+def compute_data_hash(data_dict):
+    data_json = json.dumps(data_dict, ensure_ascii=False, sort_keys=True)
+    data_hash = hashlib.md5(data_json.encode("utf-8")).hexdigest()
+    return data_json, data_hash
 
 # 获取日志文件路径
 log_path = get_resource_path("db/db_operations.log")
@@ -83,16 +92,63 @@ def create_tables():
                               FOREIGN KEY (sub_table_id) REFERENCES SubExcelTable (sequence)
                           )''')
 
+        # cursor.execute('''
+        # CREATE UNIQUE INDEX IF NOT EXISTS idx_subxml_unique
+        # ON SubXMLData(
+        #     main_table_id,
+        #     COALESCE(sub_table_id, ''),
+        #     type,
+        #     event_time,
+        #     direction,
+        #     messageID
+        # )
+        # ''')
+        cursor.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_subxml_unique_key
+        ON SubXMLData (
+            main_table_id,
+            sub_table_id,
+            type,
+            username,
+            direction
+        );
+        ''')
+
+        # cursor.execute('''
+        #     CREATE TABLE IF NOT EXISTS SignatureForm (
+        #         id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 主键，自增
+        #         main_id TEXT,       --messageID这里实际是messageID
+        #         data TEXT,
+        #         direction TEXT,
+        #         related_id TEXT,
+        #         type TEXT,
+        #         username TEXT  -- 新增：用户名
+        #     )
+        # ''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS SignatureForm (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 主键，自增
-                main_id TEXT,       --messageID这里实际是messageID
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                main_id TEXT,
                 data TEXT,
+                data_hash TEXT,   -- 新增字段
                 direction TEXT,
                 related_id TEXT,
                 type TEXT,
-                username TEXT  -- 新增：用户名
-            )
+                username TEXT
+            );
+        ''')
+
+        cursor.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_signature_unique
+            ON SignatureForm(
+                main_id,
+                username,
+                direction,
+                COALESCE(related_id, ''),
+                type,
+                data_hash
+            );
         ''')
 
         # 创建 InputCache 表
@@ -1549,128 +1605,209 @@ def check_state_by_main_id(main_id, target_state):
 
 
 # 插入 MainExcelTable 数据
-def insert_main_excel_table(main_excel_data):
+def insert_main_excel_table(cursor, main_excel_data):
     """
     将主表数据插入到 MainExcelTable 中，如果记录已存在，则替换。
 
     :param main_excel_data: 包含要插入的主表数据的列表，每个元素是一个字典
     """
-    conn = None
-    cursor = None
+    if not main_excel_data:
+        print("没有主表数据需要插入")
+        return
+
+    # conn = None
+    # cursor = None
     try:
         # 创建数据库连接
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # conn = sqlite3.connect(db_path)
+        # cursor = conn.cursor()
 
-        # 插入或替换数据
-        for item in main_excel_data:
-            cursor.execute('''
-                INSERT OR REPLACE INTO MainExcelTable 
-                (sequence, created_at, state, main_table_data, deleted_at, username, AirWayBill)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
+        # 构建批量数据
+        values = [
+            (
                 item['sequence'], item['created_at'], item['state'], item['main_table_data'],
                 item['deleted_at'], item['username'], item['AirWayBill']
-            ))
+            )
+            for item in main_excel_data
+        ]
+
+        # 批量插入
+        cursor.executemany('''
+            INSERT OR REPLACE INTO MainExcelTable 
+            (sequence, created_at, state, main_table_data, deleted_at, username, AirWayBill)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', values)
+
+        # 插入或替换数据
+        # for item in main_excel_data:
+        #     cursor.execute('''
+        #         INSERT OR REPLACE INTO MainExcelTable
+        #         (sequence, created_at, state, main_table_data, deleted_at, username, AirWayBill)
+        #         VALUES (?, ?, ?, ?, ?, ?, ?)
+        #     ''', (
+        #         item['sequence'], item['created_at'], item['state'], item['main_table_data'],
+        #         item['deleted_at'], item['username'], item['AirWayBill']
+        #     ))
 
         # 提交事务
-        conn.commit()
-        logging.info(f"成功插入 {len(main_excel_data)} 条主表数据。")
+        # conn.commit()
+        logging.info(f"成功批量插入 {len(main_excel_data)} 条主表数据。")
+        print(f"成功批量插入 {len(main_excel_data)} 条主表数据。")
     except sqlite3.Error as e:
         # 捕获数据库相关错误
         logging.error(f"数据库错误: {e}")
+        print(f"数据库错误: {e}")
+        raise
     except Exception as e:
         # 捕获其他未知错误
         logging.error(f"插入主表数据时发生错误: {e}")
-    finally:
-        # 确保数据库连接关闭
-        if conn:
-            conn.close()
+        print(f"插入主表数据时发生错误: {e}")
+        raise
+    # finally:
+    #     # 确保数据库连接关闭
+    #     if conn:
+    #         conn.close()
 
 
 # 插入 SubExcelTable 数据
-def insert_sub_excel_table(sub_excel_data):
+def insert_sub_excel_table(cursor, sub_excel_data):
     """
     将子表数据插入到 SubExcelTable 中，如果记录已存在，则替换。
 
     :param sub_excel_data: 包含要插入的子表数据的列表，每个元素是一个字典
     """
-    conn = None
-    cursor = None
-    try:
-        # 创建数据库连接
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+    if not sub_excel_data:
+        print("没有SubExcelTable子表数据需要插入")
+        return
 
-        # 插入或替换数据
-        for item in sub_excel_data:
-            cursor.execute('''
-                INSERT OR REPLACE INTO SubExcelTable 
-                (main_id, sequence, state, event_time, deleted_at, username, IOSS, TrackingNumber, sub_table_data, lrn)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+    # conn = None
+    # cursor = None
+    try:
+        # # 创建数据库连接
+        # conn = sqlite3.connect(db_path)
+        # cursor = conn.cursor()
+
+        # 构建批量数据
+        values = [
+            (
                 item['main_id'], item['sequence'], item['state'], item['event_time'],
                 item['deleted_at'], item['username'], item['IOSS'], item['TrackingNumber'],
                 item['sub_table_data'], item['lrn']
-            ))
+            )
+            for item in sub_excel_data
+        ]
 
-        # 提交事务
-        conn.commit()
-        logging.info(f"成功插入 {len(sub_excel_data)} 条子表数据。")
+        # # 插入或替换数据
+        # for item in sub_excel_data:
+        #     cursor.execute('''
+        #         INSERT OR REPLACE INTO SubExcelTable
+        #         (main_id, sequence, state, event_time, deleted_at, username, IOSS, TrackingNumber, sub_table_data, lrn)
+        #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        #     ''', (
+        #         item['main_id'], item['sequence'], item['state'], item['event_time'],
+        #         item['deleted_at'], item['username'], item['IOSS'], item['TrackingNumber'],
+        #         item['sub_table_data'], item['lrn']
+        #     ))
+
+        # 批量插入
+        cursor.executemany('''
+            INSERT OR REPLACE INTO SubExcelTable 
+            (main_id, sequence, state, event_time, deleted_at, username, IOSS, TrackingNumber, sub_table_data, lrn)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', values)
+
+        # # 提交事务
+        # conn.commit()
+        logging.info(f"成功批量插入 {len(sub_excel_data)} 条子表数据。")
+        print(f"成功批量插入 {len(sub_excel_data)} 条子表数据。")
     except sqlite3.Error as e:
         # 捕获数据库相关错误
         logging.error(f"数据库错误: {e}")
+        print(f"数据库错误: {e}")
+        raise
     except Exception as e:
         # 捕获其他未知错误
-        logging.error(f"插入子表数据时发生错误: {e}")
-    finally:
-        # 确保数据库连接关闭
-        if conn:
-            conn.close()
+        logging.error(f"插入SubExcelTable子表数据时发生错误: {e}")
+        print(f"插入SubExcelTable子表数据时发生错误: {e}")
+        raise
+    # finally:
+    #     # 确保数据库连接关闭
+    #     if conn:
+    #         conn.close()
 
 
 # 插入 SubExcelData 数据
-def insert_sub_excel_data(sub_excel_data):
+def insert_sub_excel_data(cursor, sub_excel_data):
     """
     将子表数据插入到 SubExcelData 中，如果记录已存在，则替换。
 
     :param sub_excel_data: 包含要插入的子表数据的列表，每个元素是一个字典
     """
-    conn = None
-    cursor = None
-    try:
-        # 创建数据库连接
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
 
-        # 插入或替换数据
-        for item in sub_excel_data:
-            cursor.execute('''
-                INSERT OR REPLACE INTO SubExcelData 
-                (sub_table_id, row_data, previous_document, additional_information, 
-                 supporting_document, additional_reference, transport_document, 
-                 deleted_at, username)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+    if not sub_excel_data:
+        print("没有SubExcelData子表数据需要插入")
+        return
+
+    # conn = None
+    # cursor = None
+    try:
+        # # 创建数据库连接
+        # conn = sqlite3.connect(db_path)
+        # cursor = conn.cursor()
+
+        # 构建批量数据
+        values = [
+            (
                 item['sub_table_id'], item['row_data'], item['previous_document'],
                 item['additional_information'], item['supporting_document'],
                 item['additional_reference'], item['transport_document'],
                 item['deleted_at'], item['username']
-            ))
+            )
+            for item in sub_excel_data
+        ]
 
-        # 提交事务
-        conn.commit()
-        logging.info(f"成功插入 {len(sub_excel_data)} 条子表数据。")
+        # 批量插入
+        cursor.executemany('''
+            INSERT OR REPLACE INTO SubExcelData 
+            (sub_table_id, row_data, previous_document, additional_information, 
+             supporting_document, additional_reference, transport_document, 
+             deleted_at, username)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', values)
+
+        # # 插入或替换数据
+        # for item in sub_excel_data:
+        #     cursor.execute('''
+        #         INSERT OR REPLACE INTO SubExcelData
+        #         (sub_table_id, row_data, previous_document, additional_information,
+        #          supporting_document, additional_reference, transport_document,
+        #          deleted_at, username)
+        #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        #     ''', (
+        #         item['sub_table_id'], item['row_data'], item['previous_document'],
+        #         item['additional_information'], item['supporting_document'],
+        #         item['additional_reference'], item['transport_document'],
+        #         item['deleted_at'], item['username']
+        #     ))
+        #
+        # # 提交事务
+        # conn.commit()
+        logging.info(f"成功批量插入 {len(sub_excel_data)} 条子表数据。")
+        print(f"成功批量插入 {len(sub_excel_data)} 条子表数据。")
     except sqlite3.Error as e:
         # 捕获数据库相关错误
         logging.error(f"数据库错误: {e}")
+        print(f"数据库错误: {e}")
+        raise
     except Exception as e:
         # 捕获其他未知错误
-        logging.error(f"插入子表数据时发生错误: {e}")
-    finally:
-        # 确保数据库连接关闭
-        if conn:
-            conn.close()
+        logging.error(f"插入SubExcelData子表数据时发生错误: {e}")
+        print(f"插入SubExcelData子表数据时发生错误: {e}")
+        raise
+    # finally:
+    #     # 确保数据库连接关闭
+    #     if conn:
+    #         conn.close()
 
 
 # 插入 SubXMLData 数据
@@ -1738,6 +1875,152 @@ def insert_sub_xml_data(sub_xml_data, username):
         # 确保数据库连接关闭
         if conn:
             conn.close()
+
+
+# 插入 SubXMLData 数据
+def insert_sub_xml_data_login(cursor, sub_xml_data, username):
+    """
+    将子表 XML 数据插入到 SubXMLData 中，如果记录已存在则替换；
+    对于 type 为特定类型的数据，避免插入重复记录。
+    """
+
+    if not sub_xml_data:
+        logging.info("没有子表 XML 数据需要插入")
+        return
+
+    try:
+        # 需要检查重复的类型集合
+        check_types = {"upd", "zc429", "zcx03", "zcx64", "zcx65", "zc410", "zc460"}
+
+        # --- 第一阶段：快速找出所有需要检查重复的 key（减少 N 次 SQL 查询）---
+        check_keys = []
+        for item in sub_xml_data:
+            record_type = item.get("type")
+            if record_type in check_types:
+                check_keys.append((
+                    item.get("main_id"),
+                    item.get("sub_id"),
+                    record_type,
+                    username,
+                    item.get("direction")
+                ))
+
+        # 如果没有需要检查的，避免执行无意义 SQL
+        existing_set = set()
+        if check_keys:
+            cursor.execute("DROP TABLE IF EXISTS tmp_sub_keys;")
+            cursor.execute("""
+                CREATE TEMP TABLE tmp_sub_keys (
+                    main_id TEXT,
+                    sub_id TEXT,
+                    type TEXT,
+                    username TEXT,
+                    direction TEXT
+                );
+            """)
+            cursor.executemany("""
+                INSERT INTO tmp_sub_keys (main_id, sub_id, type, username, direction)
+                VALUES (?, ?, ?, ?, ?)
+            """, check_keys)
+
+            cursor.execute("""
+                SELECT k.main_id, k.sub_id, k.type, k.username, k.direction
+                FROM tmp_sub_keys k
+                JOIN SubXMLData s
+                ON (
+                    k.main_id = s.main_table_id AND
+                    k.sub_id = s.sub_table_id AND
+                    k.type = s.type AND
+                    k.username = s.username AND
+                    k.direction = s.direction
+                )
+            """)
+
+            # # 构建批量查询 SQL
+            # placeholders = ",".join(["(?,?,?,?,?)"] * len(check_keys))
+            # flat_params = [x for tup in check_keys for x in tup]
+            #
+            # sql = f"""
+            #     SELECT main_table_id, sub_table_id, type, username, direction
+            #     FROM SubXMLData
+            #     WHERE (main_table_id, sub_table_id, type, username, direction) IN ({placeholders})
+            # """
+            #
+            # cursor.execute(sql, flat_params)
+            existing_set = set(cursor.fetchall())  # 用于 O(1) 查重
+
+        # --- 第二阶段：构建待插入列表 ---
+        batch_values = []
+        for item in sub_xml_data:
+            main_id = item.get('main_id')
+            sub_id = item.get('sub_id')
+            record_type = item.get('type')
+            direction = item.get('direction')
+
+            key = (main_id, sub_id, record_type, username, direction)
+
+            # 判断是否重复
+            if record_type in check_types and key in existing_set:
+                logging.info(f"记录已存在，跳过插入: main_id={main_id}, sub_id={sub_id}, type={record_type}")
+                continue
+
+            if sub_id is None:
+                cursor.execute("""
+                    SELECT 1 FROM SubXMLData
+                    WHERE main_table_id = ? AND sub_table_id IS NULL
+                      AND type = ? AND xml_json_data = ? AND event_time = ?
+                      AND username = ? AND direction = ? AND messageID = ?
+                      AND CR IS ?
+                    LIMIT 1
+                """, (
+                    main_id,
+                    record_type,
+                    json.dumps(item.get('json_data', {})),
+                    item.get('event_time'),
+                    username,
+                    direction,
+                    item.get('messageID'),
+                    item.get('CR')
+                ))
+                if cursor.fetchone():
+                    continue  # 已存在，跳过
+
+            batch_values.append((
+                main_id,
+                sub_id,
+                record_type,
+                json.dumps(item.get('json_data', {})),  # json dumps 在这里做即可
+                item.get('event_time'),
+                direction,
+                username,
+                item.get('CR', None),
+                item.get('messageID', None)
+            ))
+
+        # --- 第三阶段：批量插入 ---
+        if batch_values:
+            cursor.executemany('''
+                INSERT OR REPLACE INTO SubXMLData 
+                (main_table_id, sub_table_id, type, xml_json_data, event_time,
+                 direction, username, CR, messageID)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', batch_values)
+
+            logging.info(f"成功批量插入 {len(batch_values)} 条子表 XML 数据。")
+            print(f"成功批量插入 {len(batch_values)} 条子表 XML 数据。")
+        else:
+            logging.info("没有新的子表 XML 数据需要插入")
+            print("没有新的子表 XML 数据需要插入")
+    except sqlite3.Error as e:
+        # 捕获数据库相关错误
+        logging.error(f"数据库错误: {e}")
+        print(f"数据库错误: {e}")
+        raise
+    except Exception as e:
+        # 捕获其他未知错误
+        logging.error(f"插入SubXMLData子表数据时发生错误: {e}")
+        print(f"插入SubXMLData子表数据时发生错误: {e}")
+        raise
 
 
 def get_id_and_airwaybill_from_main_table_by_state_sent(username):
@@ -2845,6 +3128,159 @@ def get_xml_data_by_type(username, data_types):
             conn.close()
 
     return results
+
+
+# def synchronize_signature_form_login(cursor, signature_datas):
+#     """
+#     批量插入 SignatureForm，避免重复，性能优化版本。
+#     """
+#
+#     if not signature_datas:
+#         print("没有 SignatureForm 数据需要插入")
+#         return
+#
+#     try:
+#         # ----- 第 1 阶段：预处理数据 + 收集所有要查重的 key -----
+#         insert_candidates = []
+#         check_keys = []
+#
+#         for item in signature_datas:
+#             main_id = item.get("main_id")
+#             data_dict = item.get("data", {})
+#             direction = item.get("direction")
+#             username = item.get("username")
+#             related_id = item.get("related_id")
+#             type_value = item.get("type")
+#
+#             # 跳过不完整的数据
+#             if not main_id or not username or direction is None:
+#                 continue
+#
+#             data_json = json.dumps(data_dict, ensure_ascii=False, sort_keys=True)
+#
+#             key = (main_id, data_json, username, direction, related_id, type_value)
+#             check_keys.append(key)
+#             insert_candidates.append(key)
+#
+#         # 若无有效数据
+#         if not check_keys:
+#             logging.info("没有新的 SignatureForm 数据需要插入")
+#             return
+#
+#         existing_set = get_existing_signature_set(cursor, check_keys, chunk_size=100)
+#
+#         # ----- 第 3 阶段：过滤已有记录，生成待插入列表 -----
+#         batch_values = [item for item in insert_candidates if item not in existing_set]
+#
+#         # ----- 第 4 阶段：批量插入 -----
+#         if batch_values:
+#             cursor.executemany("""
+#                 INSERT OR IGNORE INTO SignatureForm (main_id, data, username, direction, related_id, type)
+#                 VALUES (?, ?, ?, ?, ?, ?)
+#             """, batch_values)
+#             logging.info(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
+#             print(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
+#         else:
+#             logging.info("没有新的 SignatureForm 数据可以插入")
+#             print("没有新的 SignatureForm 数据可以插入")
+#
+#     except sqlite3.Error as e:
+#         logging.error(f"数据库错误: {e}")
+#         raise
+#     except Exception as e:
+#         logging.error(f"插入 SignatureForm 数据时发生错误: {e}")
+#         raise
+#
+#
+# def get_existing_signature_set(cursor, check_keys, chunk_size=100):
+#     """
+#     分块查询 SignatureForm 已有记录，避免 too many SQL variables
+#     :param check_keys: list of tuples (main_id, data, username, direction, related_id, type)
+#     """
+#     existing_set = set()
+#     total = len(check_keys)
+#     for i in range(0, total, chunk_size):
+#         chunk = check_keys[i:i + chunk_size]
+#
+#         conditions = []
+#         flat_params = []
+#
+#         for key in chunk:
+#             main_id, data, username, direction, related_id, type_value = key
+#             if related_id is None:
+#                 conditions.append(
+#                     "(main_id=? AND data=? AND username=? AND direction=? AND related_id IS NULL AND type=?)"
+#                 )
+#                 flat_params.extend([main_id, data, username, direction, type_value])
+#             else:
+#                 conditions.append(
+#                     "(main_id=? AND data=? AND username=? AND direction=? AND related_id=? AND type=?)"
+#                 )
+#                 flat_params.extend([main_id, data, username, direction, related_id, type_value])
+#
+#         sql = f"""
+#             SELECT main_id, data, username, direction, related_id, type
+#             FROM SignatureForm
+#             WHERE {" OR ".join(conditions)}
+#         """
+#         cursor.execute(sql, flat_params)
+#         existing_set.update(cursor.fetchall())
+#     return existing_set
+
+def synchronize_signature_form_login(cursor, signature_datas):
+    """
+    使用唯一索引 + data_hash 进行自动去重，高性能版本
+    """
+
+    if not signature_datas:
+        print("没有 SignatureForm 数据需要插入")
+        return
+
+    try:
+        batch_values = []
+
+        for item in signature_datas:
+            main_id = item.get("main_id")
+            data_dict = item.get("data", {})
+            direction = item.get("direction")
+            username = item.get("username")
+            related_id = item.get("related_id")
+            type_value = item.get("type")
+
+            if not main_id or not username or direction is None:
+                continue
+
+            # 计算 data_json 和 hash
+            data_json, data_hash = compute_data_hash(data_dict)
+
+            batch_values.append((
+                main_id,
+                data_json,
+                data_hash,
+                username,
+                direction,
+                related_id,
+                type_value
+            ))
+
+        if batch_values:
+            cursor.executemany("""
+                INSERT OR IGNORE INTO SignatureForm
+                (main_id, data, data_hash, username, direction, related_id, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, batch_values)
+            logging.info(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
+            print(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
+        else:
+            logging.info("没有新的 SignatureForm 数据可以插入")
+            print("没有新的 SignatureForm 数据可以插入")
+
+    except sqlite3.Error as e:
+        logging.error(f"数据库错误: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"插入 SignatureForm 数据时发生错误: {e}")
+        raise
 
 
 def synchronize_signature_form(signature_datas):
