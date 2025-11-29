@@ -19,6 +19,16 @@ class SignedSignatureProperties():
         self.email = email
 
 
+def prepare_certificate(PFX_PATH, PFX_PASSWORD):
+    """只加载一次 PFX 证书"""
+    with open(PFX_PATH, "rb") as key_file:
+        certificate = pkcs12.load_key_and_certificates(
+            key_file.read(),
+            PFX_PASSWORD.encode('utf-8')
+        )
+    return certificate
+
+
 def sign_xml(xml_data, PFX_PATH, PFX_PASSWORD, properties: SignedSignatureProperties):
     xml = etree.XML(xml_data)
     signature = xmlsig.template.create(
@@ -54,6 +64,44 @@ def sign_xml(xml_data, PFX_PATH, PFX_PASSWORD, properties: SignedSignatureProper
     xml.append(signature)
     with open(PFX_PATH, "rb") as key_file:
         certificate = pkcs12.load_key_and_certificates(key_file.read(), PFX_PASSWORD.encode('utf-8'))
+    ctx = XAdESContext(policy)
+    ctx.load_pkcs12(certificate)
+    ctx.sign(signature)
+    signed_xml = etree.ElementTree(xml)
+    return etree.tostring(signed_xml, pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def sign_xml_with_reused_certificate(xml_data, certificate, properties: SignedSignatureProperties):
+    xml = etree.XML(xml_data)
+    signature = xmlsig.template.create(
+        xmlsig.constants.TransformInclC14N,
+        xmlsig.constants.TransformRsaSha256,
+        "Signature",
+    )
+    ref = xmlsig.template.add_reference(
+        signature, xmlsig.constants.TransformSha256, uri="", name="REF"
+    )
+    xmlsig.template.add_transform(ref, xmlsig.constants.TransformEnveloped)
+    ki = xmlsig.template.ensure_key_info(signature, name="KI")
+    data = xmlsig.template.add_x509_data(ki)
+    xmlsig.template.x509_data_add_certificate(data)
+    serial = xmlsig.template.x509_data_add_issuer_serial(data)
+    xmlsig.template.x509_issuer_serial_add_issuer_name(serial)
+    xmlsig.template.x509_issuer_serial_add_serial_number(serial)
+    xmlsig.template.add_key_value(ki)
+    qualifying = template.create_qualifying_properties(
+        signature, name=utils.get_unique_id(), etsi='xades'
+    )
+    props = template.create_signed_properties(qualifying, name=utils.get_unique_id())
+    if properties.signer:
+        template.add_claimed_role(props, properties.signer + properties.phone + properties.email)
+    if properties.city:
+        template.add_production_place(props, city=properties.city)
+    policy = GenericPolicyId(
+        POLICY_ID,
+        POLICY_NAME,
+        xmlsig.constants.TransformSha256)
+    xml.append(signature)
     ctx = XAdESContext(policy)
     ctx.load_pkcs12(certificate)
     ctx.sign(signature)

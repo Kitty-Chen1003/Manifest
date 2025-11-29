@@ -9,6 +9,10 @@ import xml.dom.minidom
 
 from utils.path import get_resource_path
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from utils.signature import prepare_certificate
+
 
 def read_config(config_path):
     with open(config_path, 'r') as file:
@@ -287,91 +291,149 @@ def upload_excel_data(token, data, file_path, password, signature_information):
         response = requests.post(url + '/generate/upload_zc415', json=data, headers=headers)
 
         # 检查响应的状态码
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get('state') == 200:
-                datas = response_data.get('data')
-                signed_datas = []
-                index_main_id = ''
-                datas_subid_lrn = []
-                for data in datas:
-                    try:
-                        main_id = data['main_id']
-                        sub_id = data['sub_id']
-                        lrn = data['lrn']
-                        xml_data = data['xml_data']
-                        type = data['type']
-                        message_id = data['message_id']
-
-                        datas_subid_lrn.append([sub_id, lrn])
-                        try:
-                            signed_xml_data = signature.sign_xml(
-                                xml_data.encode('utf-8'),
-                                file_path,
-                                password,
-                                signature.SignedSignatureProperties(
-                                    signer=signature_information['name'],
-                                    phone=signature_information['phoneNumber'],
-                                    email=signature_information['eMailAddress']
-                                )
-                            )
-                        except Exception as e:
-                            print(f"处理 XML 文件时出错: {e}")
-                            return None, None
-                        # 签名
-                        signed_data = {
-                            'main_id': main_id,
-                            'sub_id': sub_id,
-                            'xml_data': signed_xml_data.decode('utf-8'),
-                            'lrn': lrn,
-                            'type': type,
-                            'message_id': message_id,
-                            'signature_information': signature_information,
-                            'direction': 'send'
-                        }
-                        signed_datas.append(signed_data)
-                    except KeyError as e:
-                        # 捕获缺少关键字段的异常
-                        print(f"Missing key in data: {e}")
-                        return None, None
-
-                upload_data = {
-                    'username': username,
-                    'data': signed_datas
-                }
-
-                try:
-                    # 发送签名后的数据
-                    sign_response = requests.post(url + '/generate/sign_xml', json=upload_data,
-                                                  headers=headers)
-
-                    sign_response_data = sign_response.json()
-                    if sign_response_data.get('state') == 200:
-                        # message_id_list = sign_response_data.get('data')
-                        # db.insert_signature_information(
-                        #     message_id_list,
-                        #     signature_information,
-                        #     'send',
-                        #     username
-                        # )
-                        print("Excel data uploaded successfully.")
-                        return sign_response_data.get('state'), datas_subid_lrn  # 返回状态码，或者其他你需要的信息
-                    else:
-                        print(f"Failed to sign XML. Status code: {sign_response.status_code}")
-                        print(f"Response: {sign_response.text}")
-                        return None, None
-                except requests.exceptions.RequestException as e:
-                    # 捕获 sign_xml 请求中的异常
-                    print(f"Sign XML request failed: {e}")
-                    return None, None
-            else:
-                # 如果 state 不为 200，打印错误信息
-                print(f"Failed to upload Excel data. State: {response_data.get('state')}")
-                print(f"Response: {response_data}")
-                return None, None
-        else:
+        if response.status_code != 200:
             print(f"Failed to upload Excel data. HTTP Status code: {response.status_code}")
             print(f"Response: {response.text}")
+            return None, None
+
+        response_data = response.json()
+
+        if response_data.get('state') != 200:
+            # 如果 state 不为 200，打印错误信息
+            print(f"Failed to upload Excel data. State: {response_data.get('state')}")
+            print(f"Response: {response_data}")
+            return None, None
+
+        datas = response_data.get('data')
+        signed_datas = []
+        datas_subid_lrn = []
+
+        certificate = prepare_certificate(file_path, password)
+
+        # 并行签名函数，增加耗时输出
+        def sign_single_xml(d):
+            try:
+                main_id = d['main_id']
+                sub_id = d['sub_id']
+                lrn = d['lrn']
+                xml_data = d['xml_data']
+                type_ = d['type']
+                message_id = d['message_id']
+            except KeyError as e:
+                print(f"Missing key in data: {e}")
+                raise KeyError(f"Missing key in data: {e}")
+
+            try:
+                return signature.sign_xml_with_reused_certificate(
+                    xml_data.encode('utf-8'),
+                    certificate,
+                    signature.SignedSignatureProperties(
+                        signer=signature_information['name'],
+                        phone=signature_information['phoneNumber'],
+                        email=signature_information['eMailAddress']
+                    )
+                ).decode('utf-8')
+            except Exception as e:
+                print(f"处理 XML 文件时出错: {e}")
+                raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+
+        # 每批处理大小
+        BATCH_SIZE = 500
+        # 线程池数量，32核机器可以设置为 64
+        MAX_WORKERS = 32
+        USE_MULTITHREADING = True
+
+        if USE_MULTITHREADING:
+            print("使用多线程模式签名 XML...")
+            # 分批处理
+            for i in range(0, len(datas), BATCH_SIZE):
+                batch = datas[i:i + BATCH_SIZE]
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    future_to_data = {executor.submit(sign_single_xml, d): d for d in batch}
+                    for future in as_completed(future_to_data):
+                        d = future_to_data[future]
+                        signed_xml = future.result()  # 异常会直接 raise
+                        signed_datas.append({
+                            'main_id': d['main_id'],
+                            'sub_id': d['sub_id'],
+                            'xml_data': signed_xml,
+                            'lrn': d['lrn'],
+                            'type': d['type'],
+                            'message_id': d['message_id'],
+                            'signature_information': signature_information,
+                            'direction': 'send'
+                        })
+                        datas_subid_lrn.append([d['sub_id'], d['lrn']])
+
+        else:
+            print("使用单线程模式签名 XML...")
+            for data in datas:
+                try:
+                    main_id = data['main_id']
+                    sub_id = data['sub_id']
+                    lrn = data['lrn']
+                    xml_data = data['xml_data']
+                    type = data['type']
+                    message_id = data['message_id']
+
+                    datas_subid_lrn.append([sub_id, lrn])
+                    try:
+                        signed_xml_data = signature.sign_xml(
+                            xml_data.encode('utf-8'),
+                            file_path,
+                            password,
+                            signature.SignedSignatureProperties(
+                                signer=signature_information['name'],
+                                phone=signature_information['phoneNumber'],
+                                email=signature_information['eMailAddress']
+                            )
+                        )
+                    except Exception as e:
+                        print(f"处理 XML 文件时出错: {e}")
+                        return None, None
+                    # 签名
+                    signed_data = {
+                        'main_id': main_id,
+                        'sub_id': sub_id,
+                        'xml_data': signed_xml_data.decode('utf-8'),
+                        'lrn': lrn,
+                        'type': type,
+                        'message_id': message_id,
+                        'signature_information': signature_information,
+                        'direction': 'send'
+                    }
+                    signed_datas.append(signed_data)
+                except KeyError as e:
+                    # 捕获缺少关键字段的异常
+                    print(f"Missing key in data: {e}")
+                    return None, None
+
+        # 批量发送签名数据
+        upload_data = {'username': username, 'data': signed_datas}
+        try:
+            # 发送签名后的数据
+            sign_response = requests.post(url + '/generate/sign_xml', json=upload_data,
+                                          headers=headers)
+
+            sign_response_data = sign_response.json()
+            if sign_response_data.get('state') != 200:
+                print(f"Failed to sign XML. Status code: {sign_response.status_code}")
+                print(f"Response: {sign_response.text}")
+                return None, None
+
+            # message_id_list = sign_response_data.get('data')
+            # db.insert_signature_information(
+            #     message_id_list,
+            #     signature_information,
+            #     'send',
+            #     username
+            # )
+            print("Excel data uploaded successfully.")
+            return sign_response_data.get('state'), datas_subid_lrn  # 返回状态码，或者其他你需要的信息
+
+        except requests.exceptions.RequestException as e:
+            # 捕获 sign_xml 请求中的异常
+            print(f"Sign XML request failed: {e}")
             return None, None
 
     except requests.exceptions.RequestException as e:
@@ -555,106 +617,208 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
         response.raise_for_status()  # 如果响应状态码是 4xx 或 5xx，将引发 httpsError
 
         # 检查响应的状态码
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data.get('state') == 200:
-                datas = response_data.get('data')
-                signed_datas = []
-                index_main_id = ''
-                if not signature_info:
-                    signature_information = {}
-                for data in datas:
-                    try:
-                        main_id = data['main_id']
-                        sub_id = data['sub_id']
-                        xml_data = data['xml_data']
-                        type = data['type']
-                        message_id = data['message_id']
+        if response.status_code != 200:
+            print("Failed to upload, status_code != 200")
+            return None
 
-                        def format_xml(xml_string):
-                            """
-                            格式化 XML 字符串为标准格式（带缩进）
-                            :param xml_string: 原始的 XML 字符串
-                            :return: 格式化后的 XML 字符串
-                            """
-                            # 使用 minidom 解析并格式化
-                            dom = xml.dom.minidom.parseString(xml_string)
-                            return dom.toprettyxml(indent="  ")
-                        if type == 'upd':
-                            xml_data = format_xml(xml_data)
+        response_data = response.json()
 
-                        if main_id != index_main_id:
-                            index_main_id = main_id
-                            if not signature_info:
-                                signature_information = \
-                                    db.get_main_table_data_by_sequence(index_main_id)['representative contact person'][
-                                        0]
-                            else:
-                                signature_information = signature_info
-                        try:
-                            signed_xml_data = signature.sign_xml(
-                                xml_data.encode('utf-8'),
-                                file_path,
-                                password,
-                                signature.SignedSignatureProperties(
-                                    signer=signature_information['name'],
-                                    phone=signature_information['phoneNumber'],
-                                    email=signature_information['eMailAddress']
-                                )
-                            )
-                        except Exception as e:
-                            print(f"处理 XML 文件时出错: {e}")
-                            return 'error'
+        if response_data.get('state') != 200:
+            # 如果 state 不为 200，打印错误信息
+            print(f"Failed to upload Excel data. State: {response_data.get('state')}")
+            print(f"Response: {response_data}")
+            return None
 
-                        # 签名
-                        signed_data = {
-                            'main_id': main_id,
-                            'sub_id': sub_id,
-                            'xml_data': signed_xml_data.decode('utf-8'),
-                            'type': type,
-                            'message_id': message_id,
-                            'signature_information': signature_information,
-                            'direction': 'send'
-                        }
-                        signed_datas.append(signed_data)
-                    except KeyError as e:
-                        # 捕获缺少关键字段的异常
-                        print(f"Missing key in data: {e}")
-                        return None
+        datas = response_data.get('data')
+        signed_datas = []
+        index_main_id = ''
 
-                upload_data = {
-                    'username': username,
-                    'data': signed_datas
+        if not signature_info:
+            signature_information = {}
+
+        def format_xml(xml_string):
+            """
+            格式化 XML 字符串为标准格式（带缩进）
+            :param xml_string: 原始的 XML 字符串
+            :return: 格式化后的 XML 字符串
+            """
+            # 使用 minidom 解析并格式化
+            dom = xml.dom.minidom.parseString(xml_string)
+            return dom.toprettyxml(indent="  ")
+
+        # def format_xml(xml_string):
+        #     from lxml import etree
+        #     parser = etree.XMLParser(remove_blank_text=True)
+        #     root = etree.fromstring(xml_string.encode('utf-8'), parser)
+        #     return etree.tostring(root, pretty_print=True, encoding='unicode')
+
+        def sign_single_xml_parallel(d, certificate, sig_info):
+            try:
+                main_id = d['main_id']
+                sub_id = d['sub_id']
+                xml_data = d['xml_data']
+                type_ = d['type']
+                message_id = d['message_id']
+            except KeyError as e:
+                print(f"Missing key in data: {e}")
+                raise KeyError(f"Missing key in data: {e}")
+
+            # type == upd → 格式化
+            if type_ == 'upd':
+                xml_data = format_xml(xml_data)
+
+            try:
+                signed_xml = signature.sign_xml_with_reused_certificate(
+                    xml_data.encode('utf-8'),
+                    certificate,
+                    signature.SignedSignatureProperties(
+                        signer=sig_info['name'],
+                        phone=sig_info['phoneNumber'],
+                        email=sig_info['eMailAddress']
+                    )
+                ).decode('utf-8')
+
+                return {
+                    'main_id': main_id,
+                    'sub_id': sub_id,
+                    'xml_data': signed_xml,
+                    'type': type_,
+                    'message_id': message_id,
+                    'signature_information': sig_info,
+                    'direction': 'send'
                 }
 
+            except Exception as e:
+                print(f"处理 XML 文件时出错: {e}")
+                raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+
+
+        USE_MULTITHREADING = True
+        BATCH_SIZE = 500
+        MAX_WORKERS = 32
+
+        if USE_MULTITHREADING:
+
+            print("使用多线程模式签名 XML...")
+
+            # 一次性加载证书
+            certificate = prepare_certificate(file_path, password)
+
+            # 按 main_id 分组（避免频繁查数据库）
+            mainid_to_datas = {}
+            for d in datas:
+                mainid_to_datas.setdefault(d['main_id'], []).append(d)
+
+            signature_cache = {}
+
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = []
+
+                for main_id, group_datas in mainid_to_datas.items():
+
+                    if main_id not in signature_cache:
+                        signature_cache[main_id] = (
+                            db.get_main_table_data_by_sequence(main_id)['representative contact person'][0]
+                            if not signature_info else signature_info
+                        )
+                    sig_info = signature_cache[main_id]
+
+                    # -------5) batch submit to same executor---
+                    for i in range(0, len(group_datas), BATCH_SIZE):
+                        batch = group_datas[i:i + BATCH_SIZE]
+
+                        for d in batch:
+                            futures.append(
+                                executor.submit(sign_single_xml_parallel, d, certificate, sig_info)
+                            )
+
+                # ----------6) gather results-----------------
+                for future in as_completed(futures):
+                    signed_datas.append(future.result())
+
+        else:
+            # -----------------------------
+            # 单线程模式（保持原始逻辑）
+            # -----------------------------
+            print("使用单线程模式签名 XML...")
+
+            for data in datas:
                 try:
-                    # 发送签名后的数据
-                    sign_response = requests.post(url + '/generate/sign_xml', json=upload_data,
-                                                  headers=headers)
-                    sign_response_data = sign_response.json()
-                    if sign_response_data.get('state') == 200:
-                        # message_id_list = sign_response_data.get('data')
-                        # db.insert_signature_information(
-                        #     message_id_list,
-                        #     signature_information,
-                        #     'send',
-                        #     username
-                        # )
-                        print("Excel data uploaded successfully.")
-                        return sign_response_data.get('state')  # 返回状态码，或者其他你需要的信息
-                    else:
-                        print(f"Failed to sign XML. Status code: {sign_response.status_code}")
-                        print(f"Response: {sign_response.text}")
-                        return None
-                except requests.exceptions.RequestException as e:
-                    # 捕获 sign_xml 请求中的异常
-                    print(f"Sign XML request failed: {e}")
+                    main_id = data['main_id']
+                    sub_id = data['sub_id']
+                    xml_data = data['xml_data']
+                    type_ = data['type']
+                    message_id = data['message_id']
+
+                    # type == upd → 格式化 XML
+                    if type_ == 'upd':
+                        xml_data = format_xml(xml_data)
+
+                    # main_id 切换 → 获取新的签名人信息
+                    if main_id != index_main_id:
+                        index_main_id = main_id
+                        if not signature_info:
+                            signature_information = db.get_main_table_data_by_sequence(index_main_id)[
+                                'representative contact person'][0]
+                        else:
+                            signature_information = signature_info
+
+                    try:
+                        signed_xml_data = signature.sign_xml(
+                            xml_data.encode('utf-8'),
+                            file_path,
+                            password,
+                            signature.SignedSignatureProperties(
+                                signer=signature_information['name'],
+                                phone=signature_information['phoneNumber'],
+                                email=signature_information['eMailAddress']
+                            )
+                        )
+                    except Exception as e:
+                        print(f"处理 XML 文件时出错: {e}")
+                        return 'error'
+
+                    signed_datas.append({
+                        'main_id': main_id,
+                        'sub_id': sub_id,
+                        'xml_data': signed_xml_data.decode('utf-8'),
+                        'type': type_,
+                        'message_id': message_id,
+                        'signature_information': signature_information,
+                        'direction': 'send'
+                    })
+
+                except KeyError as e:
+                    print(f"Missing key in data: {e}")
                     return None
-            else:
-                # 如果 state 不为 200，打印错误信息
-                print(f"Failed to upload Excel data. State: {response_data.get('state')}")
-                print(f"Response: {response_data}")
-                return None
+
+        upload_data = {
+            'username': username,
+            'data': signed_datas
+        }
+
+        try:
+            # 发送签名后的数据
+            sign_response = requests.post(url + '/generate/sign_xml', json=upload_data,
+                                          headers=headers)
+            sign_response_data = sign_response.json()
+            if sign_response_data.get('state') == 200:
+                # message_id_list = sign_response_data.get('data')
+                # db.insert_signature_information(
+                #     message_id_list,
+                #     signature_information,
+                #     'send',
+                #     username
+                # )
+                print("Excel data uploaded successfully.")
+                return 200  # 返回状态码，或者其他你需要的信息
+            print(f"Failed to sign XML. Status code: {sign_response.status_code}")
+            print(f"Response: {sign_response.text}")
+            return None
+        except requests.exceptions.RequestException as e:
+            # 捕获 sign_xml 请求中的异常
+            print(f"Sign XML request failed: {e}")
+            return None
 
     except requests.exceptions.HTTPError as https_err:
         print(f"https error occurred: {https_err}")

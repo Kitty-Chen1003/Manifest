@@ -1180,6 +1180,107 @@ def fetch_all_from_input_cache(username):
             conn.close()
 
 
+def fetch_zc415_data_by_main_id_list(cursor, main_id_list):
+    placeholders = ",".join("?" * len(main_id_list))
+    sql = f"""
+        SELECT
+            m.sequence AS main_id,
+            m.main_table_data,
+
+            s.sequence AS sub_id,
+
+            d.row_data,
+            d.previous_document,
+            d.additional_information,
+            d.supporting_document,
+            d.additional_reference,
+            d.transport_document
+
+        FROM MainExcelTable m
+        LEFT JOIN SubExcelTable s
+            ON m.sequence = s.main_id
+        LEFT JOIN SubExcelData d
+            ON s.sequence = d.sub_table_id
+
+        WHERE m.sequence IN ({placeholders})
+        ORDER BY m.sequence
+    """
+
+    try:
+        cursor.execute(sql, main_id_list)
+        rows = cursor.fetchall()
+        if not rows:
+            raise ValueError(f"没有找到 main_id_list 对应的 MainExcelTable 数据: {main_id_list}")
+        final_result = {}
+        found_main_ids = set()
+
+        # 为每个 main_id 初始化 sub_index，避免每行遍历列表
+        sub_index_map = {}
+
+        for row in rows:
+            main_id, main_table_data, sub_id, row_data, prev_doc, add_info, supp_doc, add_ref, trans_doc = row
+            found_main_ids.add(main_id)
+
+            # 初始化 main_id dict
+            if main_id not in final_result:
+                final_result[main_id] = {
+                    "main_id": main_id,
+                    "main_table_data": json.loads(main_table_data),
+                    "sub_data": []
+                }
+                sub_index_map[main_id] = {}
+
+            # sub_id 为空，说明没有子表，跳过
+            if sub_id is None:
+                raise ValueError(f"main_id={main_id} 的子表 ID(sub_id) 为空，数据异常！")
+
+            # 查找 sub_id 是否已经存在
+            sub_index = sub_index_map[main_id]
+            if sub_id not in sub_index:
+                sub_dict = {"sub_id": sub_id, "rows_data": []}
+                final_result[main_id]["sub_data"].append(sub_dict)
+                sub_index[sub_id] = sub_dict
+            else:
+                sub_dict = sub_index[sub_id]
+
+            # 如果 row_data 存在，加入 rows_data
+            if row_data is not None:
+                sub_dict["rows_data"].append({
+                    "row_data": json.loads(row_data),
+                    "previous_document": json.loads(prev_doc),
+                    "additional_information": json.loads(add_info),
+                    "supporting_document": json.loads(supp_doc),
+                    "additional_reference": json.loads(add_ref),
+                    "transport_document": json.loads(trans_doc)
+                })
+
+        missing_ids = set(main_id_list) - found_main_ids
+        if missing_ids:
+            raise ValueError(f"以下 main_id 未找到 MainExcelTable 数据: {missing_ids}")
+
+        return final_result
+
+    except sqlite3.Error as e:
+        print(f"通过main_id批量获取数据错误: {e}")
+        logging.error(f"通过main_id批量获取数据错误: {e}")
+        raise
+
+    except json.JSONDecodeError as e:
+        print(f"JSON 解码错误: {e}")
+        logging.error(f"JSON 解码错误: {e}")
+        raise
+
+    except ValueError as e:
+        print(f"值错误: {e}")
+        logging.error(f"值错误: {e}")
+        raise
+
+    except Exception as e:
+        print(f"未知错误: {e}")
+        logging.error(f"未知错误: {e}")
+        raise
+
+
 def fetch_zc415_data_by_main_id(main_id):
     """
     根据 main_id 获取与之相关的所有数据（包括 MainExcelTable 和 SubExcelTable 数据）。
@@ -1277,24 +1378,14 @@ def fetch_zc415_data_by_main_id(main_id):
 
 # 这里需要做一些修改
 # 发送消息成功后调用的函数，将main_id对应的主表和子表中的state都改成Sent
-def update_state_to_sent(main_id):
+def update_state_to_sent(cursor, main_id):
     """
     将 MainExcelTable 和 SubExcelTable 中与指定 main_id 相关的记录的 state 更新为 'Sent'。
 
     :param main_id: 主表 ID
     """
-    db_name = db_path
-    connection = None
-    cursor = None
 
     try:
-        # 创建数据库连接
-        connection = sqlite3.connect(db_name)
-        cursor = connection.cursor()
-
-        # 开始事务
-        connection.execute("BEGIN")
-
         # 更新 MainExcelTable 中的 state 为 'Sent'
         cursor.execute('''
             UPDATE MainExcelTable
@@ -1311,24 +1402,12 @@ def update_state_to_sent(main_id):
         ''', (main_id,))
         logging.info(f"成功更新 SubExcelTable 中的 state 为 'Sent', main_id: {main_id}")
 
-        # 提交事务
-        connection.commit()
-        logging.info(f"成功提交事务，main_id: {main_id}")
-
     except sqlite3.Error as e:
-        # 出现数据库错误时回滚事务
-        if connection:
-            connection.rollback()
         logging.error(f"数据库错误: {e}, main_id: {main_id}")
+        raise
     except Exception as e:
-        # 捕获其他异常并回滚事务
-        if connection:
-            connection.rollback()
         logging.error(f"未知错误: {e}, main_id: {main_id}")
-    finally:
-        # 确保数据库连接关闭
-        if connection:
-            connection.close()
+        raise
 
 
 # 根据id和用户名查询主表中是否有存在
@@ -2238,6 +2317,93 @@ def fetch_data_of_send_zc415(main_id, username):
         # 确保数据库连接关闭
         if conn:
             conn.close()
+
+
+def fetch_data_of_send_zc415_list(cursor, main_id_list, username):
+    """
+    批量获取多个 main_id 对应的 MainExcelTable, SubExcelTable, SubExcelData。
+    返回结构：
+    {
+        main_id: {
+            "MainExcelTable": [...],
+            "SubExcelTable": [...],
+            "SubExcelData": [...]
+        },
+        ...
+    }
+    """
+    try:
+        placeholders = ",".join("?" * len(main_id_list))
+
+        # -------------------------------
+        # 1) 查询 MainExcelTable
+        # -------------------------------
+        cursor.execute(f"""
+            SELECT * FROM MainExcelTable
+            WHERE sequence IN ({placeholders}) AND username=?
+        """, (*main_id_list, username))
+        columns_main = [desc[0] for desc in cursor.description]
+        main_table_map = {}
+        for row in cursor.fetchall():
+            main_id = row[1]  # 假设 sequence 在第一列
+            main_table_map.setdefault(main_id, []).append(
+                dict(zip(columns_main, row))
+            )
+
+        # -------------------------------
+        # 2) 查询 SubExcelTable
+        # -------------------------------
+        cursor.execute(f"""
+            SELECT * FROM SubExcelTable
+            WHERE main_id IN ({placeholders}) AND username=?
+        """, (*main_id_list, username))
+        columns_sub = [desc[0] for desc in cursor.description]
+        sub_table_map = {}
+        all_sub_ids = []
+        for row in cursor.fetchall():
+            main_id = row[1]
+            sub_table_map.setdefault(main_id, []).append(dict(zip(columns_sub, row)))
+            all_sub_ids.append(row[2])  # 假设 sequence 是 sub_id
+
+        # -------------------------------
+        # 3) 查询 SubExcelData
+        # -------------------------------
+        sub_excel_data_map = {}
+        if all_sub_ids:
+            placeholders2 = ",".join("?" * len(all_sub_ids))
+            cursor.execute(f"""
+                SELECT * FROM SubExcelData
+                WHERE sub_table_id IN ({placeholders2}) AND username=?
+            """, (*all_sub_ids, username))
+            columns_data = [desc[0] for desc in cursor.description]
+            for row in cursor.fetchall():
+                sub_id = row[1]  # 假设 sub_table_id 在第二列
+                sub_excel_data_map.setdefault(sub_id, []).append(dict(zip(columns_data, row)))
+
+        # -------------------------------
+        # 4) 组合最终结果
+        # -------------------------------
+        final_result = {}
+        for main_id in main_id_list:
+            final_result[main_id] = {
+                "MainExcelTable": main_table_map.get(main_id, []),
+                "SubExcelTable": sub_table_map.get(main_id, []),
+                "SubExcelData": []
+            }
+            sub_ids = [sub["sequence"] for sub in sub_table_map.get(main_id, [])]
+            sub_data = []
+            for sid in sub_ids:
+                sub_data += sub_excel_data_map.get(sid, [])
+            final_result[main_id]["SubExcelData"] = sub_data
+
+        return final_result
+
+    except sqlite3.Error as e:
+        logging.error(f"数据库错误: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"发生未知错误: {e}")
+        raise
 
 
 # 通过username和id查询

@@ -80,24 +80,27 @@ class InputSignatureInfo(QDialog):
         phone = self.phone_input.text().strip()
         email = self.email_input.text().strip()
 
-        EMAIL_REGEX = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
         # 验证是否为空
         if not name or not phone or not email:
             QMessageBox.warning(self, "Input Error", "All fields are required!")
-        elif not re.match(EMAIL_REGEX, email):
+            return
+
+        if not EMAIL_REGEX.match(email):
             QMessageBox.warning(self, "Input Error", "Invalid email format!")
-        else:
-            poland_tz = pytz.timezone('Europe/Warsaw')  # 设置波兰时区
-            poland_time = datetime.now(poland_tz)  # 获取当前波兰时间
-            # 将波兰时间转换为 UTC 时间
-            utc_time = poland_time.astimezone(pytz.utc)
-            self.signature_information = {
-                'name': name,
-                'phoneNumber': phone,
-                'eMailAddress': email,
-                'signingTime': utc_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            }
+            return
+
+        poland_tz = pytz.timezone('Europe/Warsaw')  # 设置波兰时区
+        poland_time = datetime.now(poland_tz)  # 获取当前波兰时间
+        # 将波兰时间转换为 UTC 时间
+        utc_time = poland_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.signature_information = {
+            'name': name,
+            'phoneNumber': phone,
+            'eMailAddress': email,
+            'signingTime': utc_time
+        }
         self.accept()
 
     def get_signature_info(self):

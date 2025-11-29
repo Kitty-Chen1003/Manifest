@@ -1,3 +1,6 @@
+import sqlite3
+import time
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QComboBox, QCheckBox, QPushButton, QAbstractItemView,
@@ -7,6 +10,8 @@ from PyQt5.QtCore import Qt
 import pandas as pd
 from utils import db
 from communication import http_client
+from utils.db import fetch_zc415_data_by_main_id_list, fetch_data_of_send_zc415_list
+from utils.path import get_resource_path
 from views.signature_interface import SignatureDialog
 from views.input_signature_info import InputSignatureInfo
 
@@ -99,80 +104,149 @@ class SendZC415(QDialog):
 
     def on_confirm(self):
         """获取所有选中的ID列数据，作为整型列表返回"""
-        selected_ids = []
+        # selected_ids = []
 
         # 检查选项按钮组的状态
-        if not self.goods_shipment_radio.isChecked() and not self.goods_item_radio.isChecked():
+        if not (self.goods_shipment_radio.isChecked() or self.goods_item_radio.isChecked()):
             QMessageBox.warning(self, "Warning", "Please select either GoodsShipment or GoodsItem.")
             return  # 返回发送界面，保持对话框打开
 
         # 获取选中的选项按钮的值
         selected_radio_value = "GoodsShipment" if self.goods_shipment_radio.isChecked() else "GoodsItem"
 
-        for row in range(self.table.rowCount()):
-            checkbox = self.table.cellWidget(row, 0)
-            if checkbox and checkbox.isChecked():
-                selected_ids.append(self.data[0][row])
+        # for row in range(self.table.rowCount()):
+        #     checkbox = self.table.cellWidget(row, 0)
+        #     if checkbox and checkbox.isChecked():
+        #         selected_ids.append(self.data[0][row])
+
+        # 收集选中的 ID ---
+        selected_ids = [
+            self.data[0][row]
+            for row in range(self.table.rowCount())
+            if (cb := self.table.cellWidget(row, 0)) and cb.isChecked()
+        ]
+
+        if not selected_ids:
+            QMessageBox.warning(self, "Warning", "Please select at least one.")
+            return
 
         # 获取当前下拉菜单的内容
         selected_option = self.combo_box.currentText()
 
-        if len(selected_ids) == 0:
-            QMessageBox.warning(self, "Warning", 'Please select at least one.')
-            return  # 返回发送界面，保持对话框打开
-
         if selected_option == "zc415":
             dialog = InputSignatureInfo(selected_option)
-            signature_information = {}
-            if dialog.exec_() == QDialog.Accepted:
-                signature_information = dialog.get_signature_info()
-                print(signature_information)
-            else:
+            # signature_information = {}
+            # if dialog.exec_() == QDialog.Accepted:
+            #     signature_information = dialog.get_signature_info()
+            #     print(signature_information)
+            # else:
+            #     return
+            if dialog.exec_() != QDialog.Accepted:
                 return
-            file_path = None
-            password = None
-            dialog = SignatureDialog()
-            if dialog.exec_() == QDialog.Accepted:
-                file_path, password = dialog.get_results()
-                print("Selected file path:", file_path)
-                print("Entered password:", password)
+            signature_information = dialog.get_signature_info()
+            print(signature_information)
 
-                if self.token and file_path and password:
-                    for main_id in selected_ids:
-                        data = {
-                            'username': self.username,
-                            'generation_method': selected_radio_value
-                        }
-                        main_table_data = db.fetch_zc415_data_by_main_id(main_id)
-                        data.update(main_table_data)
-                        three_table_data = db.fetch_data_of_send_zc415(main_id, self.username)
-                        data.update(three_table_data)
-                        response_status_code, datas_subid_lrn = http_client.upload_excel_data(
-                            self.token,
-                            data,
-                            file_path,
-                            password,
-                            signature_information
-                        )
-                        if response_status_code == 200:
-                            db.update_state_to_sent(main_id)
-                            for data_subid_lrn in datas_subid_lrn:
-                                db.update_sub_table(data_subid_lrn[0], new_lrn=data_subid_lrn[1])
-                        else:
-                            QMessageBox.warning(self, "Error",
-                                                f'Sending {main_id} failed (Maybe the signature password is wrong!), please try again.')
-                            return
-                        QMessageBox.information(self, "Result", 'Send zc415 successfully!')
-                else:
-                    if not self.token:
-                        QMessageBox.warning(self, "Error", 'Login failed: the account password is incorrect.')
-                        return
-                    else:
-                        QMessageBox.warning(self, "Error", 'Wrong file path and password.')
-                        return
-                self.accept()
-            else:
+            dialog = SignatureDialog()
+            if dialog.exec_() != QDialog.Accepted:
                 print("Operation cancelled")
+                return
+
+            file_path, password = dialog.get_results()
+            print("Selected file path:", file_path)
+            print("Entered password:", password)
+
+            if not self.token:
+                QMessageBox.warning(self, "Error", 'Login failed: the account password is incorrect.')
+                return
+
+            if not (file_path and password):
+                QMessageBox.warning(self, "Error", "Wrong file path or password.")
+                return
+
+            db_path = get_resource_path("db/manifest.db")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            try:
+                cursor.execute("BEGIN")
+
+                # main_table_map = {
+                #     mid: db.fetch_zc415_data_by_main_id(mid) for mid in selected_ids
+                # }
+
+                main_table_map = fetch_zc415_data_by_main_id_list(cursor, selected_ids)
+
+                # three_table_map = {
+                #     mid: db.fetch_data_of_send_zc415(mid, self.username) for mid in selected_ids
+                # }
+                three_table_map = fetch_data_of_send_zc415_list(cursor, selected_ids, self.username)
+
+                conn.commit()
+
+            except Exception as e:
+                conn.rollback()
+                print(f"获取发送数据失败: {e}")
+                QMessageBox.warning(self, "Error", f'Failed to obtain transmission data:{e}')
+                return
+
+            finally:
+                conn.close()
+
+            for main_id in selected_ids:
+                data = {
+                    'username': self.username,
+                    'generation_method': selected_radio_value
+                }
+                # main_table_data = db.fetch_zc415_data_by_main_id(main_id)
+                # data.update(main_table_data)
+                # three_table_data = db.fetch_data_of_send_zc415(main_id, self.username)
+                # data.update(three_table_data)
+                data.update(main_table_map.get(main_id, {}))
+                data.update(three_table_map.get(main_id, {}))
+
+                try:
+                    response_status_code, datas_subid_lrn = http_client.upload_excel_data(
+                        self.token,
+                        data,
+                        file_path,
+                        password,
+                        signature_information
+                    )
+                    if response_status_code != 200:
+                        QMessageBox.warning(
+                            self,
+                            "Error",
+                            f'Sending {main_id} failed (Maybe the signature password is wrong!), please try again.')
+                        return
+
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    try:
+                        cursor.execute("BEGIN")
+                        db.update_state_to_sent(cursor, main_id)
+                        for sub_id, new_lrn in datas_subid_lrn:
+                            db.update_sub_table(sub_id, new_lrn=new_lrn, cursor=cursor)
+                        conn.commit()
+
+                    except Exception as e:
+                        conn.rollback()
+                        print(f"更新数据失败: {e}")
+                        QMessageBox.warning(self, "Error", f'Failed to update data:{e}')
+                        return
+                    finally:
+                        conn.close()
+
+                except Exception as e:
+                    QMessageBox.critical(
+                        self,
+                        "Exception Occurred",
+                        f"Sending {main_id} failed due to an exception:\n{str(e)}"
+                    )
+                    return
+
+            QMessageBox.information(self, "Result", 'Send zc415 successfully!')
+            self.accept()
+
 
     def select_all(self, state):
         """全选复选框"""
