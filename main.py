@@ -13,6 +13,7 @@ from openpyxl.styles import Font
 from openpyxl.workbook import Workbook
 
 from utils import pdf, db
+from utils.common import normalize
 
 from views.create_sads import CreateSADs
 from views.sad import SADWindow
@@ -962,26 +963,40 @@ class MainWindow(QMainWindow):
                     return False
 
                 files = manifest.process_manifests(input_file_backup, file_path)
-                list_data_rows = []
-                for file in files:
-                    data_rows = file.to_dict(orient='records')
-                    new_data_rows = []
-                    for row in data_rows:
-                        new_data_row = {}
-                        for fix_key, new_key in zip(self.list_fixed_key, list_new_keys):
-                            if new_key in row:
-                                new_data_row[fix_key] = row[new_key]
 
-                        tn = str(row.get("TrackingNumber", "")).strip()
-                        new_data_row["TrackingNumberIndex"] = tracking_index_map.get(tn, -1)
-                        new_data_rows.append(new_data_row)
-                    list_data_rows.append(new_data_rows)
+                processed_rows = []
+                system_to_user = dict(zip(self.list_fixed_key, list_new_keys))
+                user_norm_to_system = {normalize(user_col): system_col
+                                       for system_col, user_col in system_to_user.items()}
+
+                for file in files:
+                    key_map = {}
+                    for col in file.columns:
+                        col_norm = normalize(col)
+                        if col_norm in user_norm_to_system:
+                            key_map[col] = user_norm_to_system[col_norm]  # Excel列名 -> 系统列名
+
+                    file.rename(columns=key_map, inplace=True)
+
+                    # 选取要保留的系统列（不存在的列直接舍弃）
+                    useful_cols = [c for c in self.list_fixed_key if c in file.columns]
+
+                    # 4. 添加 TrackingNumberIndex（如果 TrackingNumber 也被舍弃，则需要判断）
+                    if "TrackingNumber" in file.columns:
+                        file["TrackingNumberIndex"] = (
+                            file["TrackingNumber"].astype(str).str.strip().map(tracking_index_map)
+                        ).fillna(-1).astype(int)
+                        useful_cols.append("TrackingNumberIndex")
+
+                    # 5. 转 dict
+                    processed_rows.append(file[useful_cols].to_dict(orient="records"))
+
                 sub_tables_additional_data = [input_information['goodsitem previous document'],
                                               input_information['goodsitem additional information'],
                                               input_information['goodsitem supporting document'],
                                               input_information['goodsitem additional reference'],
                                               input_information['goodsitem transport document']]
-                db.store_excel_data(input_information, list_data_rows, sub_tables_additional_data, self.username)
+                db.store_excel_data(input_information, processed_rows, sub_tables_additional_data, self.username)
             self.update_main_table()
             self.show_main_table()
         else:
