@@ -226,10 +226,7 @@ def synchronize_data(token, username):
             print("Error: Missing expected data fields in the response.")
             return False, "Error: Missing expected data fields in the response."
 
-        t_db = time.perf_counter()
         bulk_insert(data, username)
-        db_time = time.perf_counter() - t_db
-        print(f"[Time] DB insert: {db_time:.4f}s")
 
         # main_excel_data = data['MainExcelTable']
         # sub_excel_data = data['SubExcelTable']
@@ -389,18 +386,11 @@ def check_status(token, data):
     headers = {'Authorization': f'Bearer {token}'}
 
     try:
-        # ----- Step 1: HTTP 请求 -----
-        start_http = time.perf_counter()
-
         # 发送请求，携带 active_main_ids
         response = requests.get(url + '/generate/check_status', headers=headers, json=data)
         response.raise_for_status()  # 如果响应状态码是 4xx 或 5xx，将引发 httpsError
 
-        end_http = time.perf_counter()
-        print(f"[Timing] HTTP 请求耗时: {end_http - start_http:.4f} 秒")
-
         # ----- Step 2: 解析 JSON -----
-        start_parse = time.perf_counter()
         # 假设服务器返回的 JSON 格式是一个列表，里面包含多个字典
         resp_json = response.json()
         state = resp_json.get('state')
@@ -408,15 +398,10 @@ def check_status(token, data):
         data_lists = payload.get('data')
         signature_datas = payload.get('signatureInfo')
 
-        end_parse = time.perf_counter()
-        print(f"[Timing] JSON 解析耗时: {end_parse - start_parse:.4f} 秒")
-
         if not data_lists:
             return state
 
         # ----- Step 3: 分组 -----
-        start_group = time.perf_counter()
-
         grouped_dict = defaultdict(list)
 
         # 按 sub_id 分组
@@ -429,9 +414,6 @@ def check_status(token, data):
 
         # 转换为二维列表
         data_lists = list(grouped_dict.values())
-
-        end_group = time.perf_counter()
-        print(f"[Timing] 数据分组耗时: {end_group - start_group:.4f} 秒")
 
         # ----- Step 4: 数据库操作 -----
 
@@ -505,9 +487,6 @@ def check_status(token, data):
                             db.update_sub_table(sub_id, new_event_time=event_time, cursor=cursor)
 
                 conn.commit()
-
-                end_sub = time.perf_counter()
-                print(f"[Timing] SubXMLData 更新耗时: {end_sub - start_sub:.4f} 秒")
 
             except Exception as e:
                 conn.rollback()
