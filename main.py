@@ -1,8 +1,12 @@
 import os
 import sys
+import time
+from datetime import datetime, timedelta
+
+import pytz
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, \
     QHeaderView, QAbstractItemView, QMessageBox, QDialog, QAction, QToolBar, QHBoxLayout, QLabel, \
-    QScrollArea
+    QScrollArea, QComboBox, QLineEdit, QPushButton, QMenu
 from PyQt5.QtCore import Qt
 import pandas as pd
 
@@ -134,7 +138,7 @@ class MainWindow(QMainWindow):
 
         self.top = QWidget()
         self.top.setFixedWidth(1260)
-        self.top.setFixedHeight(360)
+        self.top.setFixedHeight(400)
 
         self.layout_top = QHBoxLayout(self.top)
 
@@ -145,13 +149,88 @@ class MainWindow(QMainWindow):
         self.sub_table.setMaximumWidth(700)
         self.sub_table.setFixedHeight(350)
 
+        self.layout_top.addWidget(self.main_table)
+        # self.layout_top.addWidget(self.sub_table)
+
+        self.sub_table_container = QWidget()
+        self.sub_table_layout = QVBoxLayout(self.sub_table_container)
+        self.sub_table_layout.setContentsMargins(0, 0, 0, 0)
+        self.sub_search_widget = QWidget()
+        self.sub_search_layout = QHBoxLayout(self.sub_search_widget)
+        self.sub_search_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.sub_search_input = QLineEdit()
+        self.sub_search_input.setFixedWidth(260)  # 设置固定宽度
+
+        self.sub_search_button = QPushButton("Search")
+        self.sub_search_layout.addWidget(self.sub_search_input)
+        self.sub_search_layout.addWidget(self.sub_search_button)
+        self.sub_search_layout.addStretch()  # 右侧留空
+
+        self.sub_table_layout.addWidget(self.sub_search_widget)
+
+        # 添加 sub_table
+        self.sub_table_layout.addWidget(self.sub_table)
+
+        # 默认隐藏整个容器
+        self.sub_table_container.hide()
+
+        # 把容器加入 top 布局（替代原来的 self.sub_table）
+        self.layout_top.addWidget(self.sub_table_container)
+
+        self.sub_search_button.clicked.connect(self.search_sub_table)
+        self.sub_search_input.returnPressed.connect(self.search_sub_table)
+
+        # ================================
+        # UPD table container (new)
+        # ================================
+        self.upd_container = QWidget()
+        self.upd_container_layout = QVBoxLayout(self.upd_container)
+        self.upd_container_layout.setContentsMargins(0, 0, 0, 0)
+
+        # ----- Filter UI -----
+        self.upd_filter_widget = QWidget()
+        self.upd_filter_layout = QHBoxLayout(self.upd_filter_widget)
+        self.upd_filter_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Type filter
+        self.upd_type_filter = QComboBox()
+        self.upd_type_filter.addItem("All")
+        for t in ["upd", "zc429", "zc460", "zcx03", "zcx64", "zcx65", "zc410"]:
+            self.upd_type_filter.addItem(t)
+
+        # Date filter
+        self.upd_date_filter = QComboBox()
+        self.upd_date_filter.addItems(["All", "Today", "Last 7 Days"])
+
+        # Connect filters to refresh function
+        self.upd_type_filter.currentIndexChanged.connect(lambda: self.update_upd_table())
+        self.upd_date_filter.currentIndexChanged.connect(lambda: self.update_upd_table())
+
+        # Add widgets to filter row
+        self.upd_filter_layout.addWidget(QLabel("Type:"))
+        self.upd_filter_layout.addWidget(self.upd_type_filter)
+        self.upd_filter_layout.addSpacing(18)
+        self.upd_filter_layout.addWidget(QLabel("Date Range:"))
+        self.upd_filter_layout.addWidget(self.upd_date_filter)
+        self.upd_filter_layout.addStretch()
+
+        # Add filter row to container
+        self.upd_container_layout.addWidget(self.upd_filter_widget)
+
+        # --------------------
+        # UPD table (original)
+        # --------------------
         self.upd_table = QTableWidget()
         self.upd_table.setMaximumWidth(560)
         self.upd_table.setFixedHeight(350)
 
-        self.layout_top.addWidget(self.main_table)
-        self.layout_top.addWidget(self.sub_table)
-        self.layout_top.addWidget(self.upd_table)
+        self.upd_container_layout.addWidget(self.upd_table)
+        self.layout_top.addWidget(self.upd_container)
+        # self.upd_table = QTableWidget()
+        # self.upd_table.setMaximumWidth(560)
+        # self.upd_table.setFixedHeight(350)
+        # self.layout_top.addWidget(self.upd_table)
 
         self.response = QWidget()
         self.response.setFixedWidth(1260)
@@ -170,7 +249,7 @@ class MainWindow(QMainWindow):
 
         # self.update_sub_table()
 
-        self.sub_table.hide()  # 初始时隐藏子表格
+        # self.sub_table.hide()  # 初始时隐藏子表格
 
         self.in_bulk_delete_mode = False  # 记录是否在批量删除模式下
 
@@ -185,6 +264,9 @@ class MainWindow(QMainWindow):
         # 双击事件处理
         self.main_table.cellDoubleClicked.connect(lambda row: self.show_sub_table(row))
         self.main_table.clicked.connect(self.main_table_single_click)
+
+        self.main_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.main_table.customContextMenuRequested.connect(self.main_table_context_menu)
 
         # 设置列宽自动调整
         self.sub_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -290,6 +372,22 @@ class MainWindow(QMainWindow):
                 self.detail_response_data.append(
                     [data[0], data[4], data[1], data[10], data[6], data[2], data[3]])  # data[0]是第1个元素，data[3]是第4个元素
             self.update_response_table()
+
+
+    def main_table_context_menu(self, pos):
+        menu = QMenu(self.main_table)
+        refresh_action = QAction("refresh UPD table", self)
+        menu.addAction(refresh_action)
+        refresh_action.triggered.connect(self.refresh_upd_for_selected_row)
+        menu.exec_(self.main_table.viewport().mapToGlobal(pos))
+
+    def refresh_upd_for_selected_row(self):
+        row = self.main_table.currentRow()
+        if row >= 0:
+            main_id = self.df_main_data_list[row][1]
+            current_upd_type = self.upd_type_filter.currentText()
+            if current_upd_type in ["zc460", "zc429"]:
+                self.update_upd_table(main_id=main_id)
 
     # sub_table单击事件，显示response_table
     def sub_table_single_click(self):
@@ -476,61 +574,214 @@ class MainWindow(QMainWindow):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
                 self.main_table.setItem(row, col, item)
 
-    def update_sub_table(self):
-        self.sub_table.setRowCount(len(self.df_sub))
-        self.sub_table.setColumnCount(len(self.df_sub.columns))
-        self.sub_table.setHorizontalHeaderLabels(self.df_sub.columns)
+    def search_sub_table(self):
+        keyword = self.sub_search_input.text().strip()
+        if not keyword:
+            # 搜索框为空时显示完整子表
+            self.update_sub_table()
+            return
 
-        for row in range(len(self.df_sub)):
-            for col in range(len(self.df_sub.columns)):
-                item_text = str(self.df_sub.iloc[row, col]) if pd.notna(self.df_sub.iloc[row, col]) else ''
-                item = QTableWidgetItem(item_text)
+        # 按行过滤，只要某一列包含关键字就保留
+        mask = self.df_sub.apply(
+            lambda row: row.astype(str).str.contains(keyword, case=False).any(),
+            axis=1
+        )
+        filtered_df = self.df_sub[mask].reset_index(drop=True)
+
+        # 更新子表显示
+        self.update_sub_table(filtered_df)
+
+    def update_sub_table(self, df=None):
+        if df is None:
+            df = self.df_sub
+
+        self.sub_table.setRowCount(len(df))
+        self.sub_table.setColumnCount(len(df.columns))
+        self.sub_table.setHorizontalHeaderLabels(df.columns)
+
+        self.sub_table.setUpdatesEnabled(False)
+        self.sub_table.blockSignals(True)
+        self.sub_table.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.sub_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+
+        values = df.values
+        rows, cols = values.shape
+
+        for row in range(rows):
+            for col in range(cols):
+                # item_text = str(df.iloc[row, col]) if pd.notna(df.iloc[row, col]) else ''
+                # item = QTableWidgetItem(item_text)
+                # item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
+                # self.sub_table.setItem(row, col, item)
+                val = "" if pd.isna(values[row][col]) else str(values[row][col])
+                item = QTableWidgetItem(val)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
                 self.sub_table.setItem(row, col, item)
 
-    def update_upd_table(self):
-        types = ['upd', 'zc429', "zcx03", "zcx64", "zcx65", "zc410", "zc460"]
-        if self.time_flag:
+        self.sub_table.blockSignals(False)
+        self.sub_table.setUpdatesEnabled(True)
+        self.sub_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.sub_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+
+    def update_upd_table(self, main_id=None):
+
+        # -------------------------
+        # Step 0: read filter values directly from UI
+        # -------------------------
+        selected_type = self.upd_type_filter.currentText()
+        selected_date_option = self.upd_date_filter.currentText()
+
+        pl_tz = pytz.timezone("Europe/Warsaw")
+        pl_now = datetime.now(pl_tz)
+
+        if selected_date_option == "Today":
+            date_start = pl_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif selected_date_option == "Last 7 Days":
+            date_start = (pl_now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            date_start = None  # "All" 不限制时间
+
+        # -------------------------
+        # Step 1：获取数据库数据
+        # -------------------------
+        all_types = ['upd', 'zc429', "zcx03", "zcx64", "zcx65", "zc410", "zc460"]
+        types = [selected_type] if selected_type != "All" else all_types
+
+        if date_start is not None:
+            upd_datas = db.get_account_data(self.username, types, date_start.strftime("%Y-%m-%d %H:%M:%S"))
+        elif self.time_flag:
             upd_datas = db.get_account_data(self.username, types, self.datetime)
         else:
             upd_datas = db.get_account_data(self.username, types)
+
+        if main_id is not None:
+            upd_datas = [d for d in upd_datas if d[3] in ["zc460", "zc429"] and d[1] == main_id]
+
+        # -------------------------
+        # Step 2：初始化空 DataFrame
+        # -------------------------
         self.df_upd = pd.DataFrame({
             'ID': pd.Series(dtype='str'),
             'type': pd.Series(dtype='str'),
             'message_id': pd.Series(dtype='str'),
             'event time': pd.Series(dtype='str'),
-            'direction': pd.Series(dtype='str')
+            'direction': pd.Series(dtype='str'),
+            'TrackingNumber': pd.Series(dtype='str')  # <<< 新增列
         })
+
+        # -------------------------
+        # Step 3：遍历数据并构建 DataFrame
+        # -------------------------
+        # Preconvert list-of-tuples into separate lists (fast)
+        ids = []
+        types_list = []
+        msg_ids = []
+        replay_times = []
+        directions = []
+        tracking_numbers = []
+
         # 遍历列表中的元组
         self.detail_upd_data = []
-        for data in upd_datas:
-            # 提取元组中的所需元素
-            response_data_id = data[1]
-            type_value = data[3]  # 元组中的第3个元素
-            replay_time = data[5]  # 元组中的第5个元素
-            direction = data[6]
-            message_id = data[10]
 
-            # 创建一个新的DataFrame用于存储当前行
-            new_row = pd.DataFrame({
-                'ID': [response_data_id],
-                'type': [type_value],
-                'message_id': [message_id],
-                'event time': [replay_time],
-                'direction': [direction]
-            })
+        # for data in upd_datas:
+        #     # 提取元组中的所需元素
+        #     response_data_id = data[1]
+        #     type_value = data[3]  # 元组中的第3个元素
+        #     replay_time = data[5]  # 元组中的第5个元素
+        #     direction = data[6]
+        #     message_id = data[10]
+        #
+        #     # 创建一个新的DataFrame用于存储当前行
+        #     new_row = pd.DataFrame({
+        #         'ID': [response_data_id],
+        #         'type': [type_value],
+        #         'message_id': [message_id],
+        #         'event time': [replay_time],
+        #         'direction': [direction]
+        #     })
+        #
+        #     # 使用pd.concat来合并DataFrame
+        #     self.df_upd = pd.concat([self.df_upd, new_row], ignore_index=True)
+        #
+        #     # 将第1和第4个元素以列表的形式存入self.detail_response_data
+        #     self.detail_upd_data.append(
+        #         [data[0], data[4], data[1], data[10], data[6], data[2], data[3]])  # data[0]是第1个元素，data[3]是第4个元素
 
-            # 使用pd.concat来合并DataFrame
-            self.df_upd = pd.concat([self.df_upd, new_row], ignore_index=True)
+        zc460_main_ids = []
+        zc460_sub_ids = []
+        zc429_main_ids = []
 
-            # 将第1和第4个元素以列表的形式存入self.detail_response_data
-            self.detail_upd_data.append(
-                [data[0], data[4], data[1], data[10], data[6], data[2], data[3]])  # data[0]是第1个元素，data[3]是第4个元素
+        for row in upd_datas:
+            if row[3] == "zc460":  # type
+                zc460_main_ids.append(row[1])
+                zc460_sub_ids.append(row[2])
+            elif row[3] == "zc429":
+                zc429_main_ids.append(row[1])
 
+        airwaybill_map_460 = db.get_airwaybill_by_main_ids(self.username, zc460_main_ids)
+        tracking_number_map = db.get_tracking_numbers_by_sub_ids(self.username, zc460_sub_ids)
+        airwaybill_map_429 = db.get_airwaybill_by_main_ids(self.username, zc429_main_ids)
+
+        for row in upd_datas:
+            _id = row[1]
+            _type = row[3]
+            _msgid = row[10]
+            _replay_time = row[5]
+            _direction = row[6]
+
+            if _type == "zc460":
+                main_table_id = row[1]
+                sub_table_id = row[2]
+                # 从 SubeExcelTable 查 tracking_number（sequence）
+                airwaybill = airwaybill_map_460.get(main_table_id, main_table_id)
+                tracking_number = tracking_number_map.get(sub_table_id, sub_table_id)
+                _id = airwaybill
+                # 查询失败不要 None，显示空白
+                tracking_numbers.append(tracking_number)
+            elif _type == "zc429":
+                main_table_id = row[1]
+                airwaybill = airwaybill_map_429.get(main_table_id, main_table_id)
+                _id = airwaybill
+                tracking_numbers.append("")  # zc429 没有 tracking_number
+            else:
+                tracking_numbers.append("")  # 其他类型直接空白
+
+            # Detail structure preserved
+            self.detail_upd_data.append([
+                row[0],
+                row[4],
+                row[1],
+                row[10],
+                row[6],
+                row[2],
+                row[3]
+            ])
+
+            ids.append(_id)
+            types_list.append(_type)
+            msg_ids.append(_msgid)
+            replay_times.append(_replay_time)
+            directions.append(_direction)
+
+        self.df_upd = pd.DataFrame({
+            "ID": ids,
+            "type": types_list,
+            "message_id": msg_ids,
+            "event time": replay_times,
+            "direction": directions,
+            "TrackingNumber": tracking_numbers
+        })
+
+        # -------------------------
+        # Step 4：构建 QTableWidget
+        # -------------------------
         self.upd_table.setRowCount(len(self.df_upd))
         self.upd_table.setColumnCount(len(self.df_upd.columns))
         self.upd_table.setHorizontalHeaderLabels(self.df_upd.columns)
 
+        # -------------------------
+        # Step 5：填充 QTableWidget 数据
+        # -------------------------
         self.upd_table.setUpdatesEnabled(False)
         self.upd_table.blockSignals(True)
         self.upd_table.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
@@ -575,7 +826,8 @@ class MainWindow(QMainWindow):
         self.index_table = 0
         self.main_table.clearSelection()  # 清空选择
         self.toolbar_return_action.setEnabled(False)
-        self.sub_table.hide()
+        # self.sub_table.hide()
+        self.sub_table_container.hide()
         self.main_table.show()
 
     def show_sub_table(self, row):
@@ -626,7 +878,8 @@ class MainWindow(QMainWindow):
         self.update_sub_table()
 
         self.main_table.hide()
-        self.sub_table.show()
+        # self.sub_table.show()
+        self.sub_table_container.show()
         self.toolbar_return_action.setEnabled(True)
 
     def create_toolbar(self):

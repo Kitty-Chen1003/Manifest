@@ -544,8 +544,8 @@ def check_status(token, data):
                             json.dumps(json_data, sort_keys=True),  # 转换为字符串并排序键
                         )
                         if data_tuple not in existing_data_set:
-                            db.store_xml_data(cursor, main_id, sub_id, type_value, json_data, event_time, direction, username,
-                                              cr, message_id)
+                            db.store_xml_data(cursor, main_id, sub_id, type_value, json_data, event_time, direction,
+                                              username, cr, message_id)
                             db.update_sub_table(sub_id, new_event_time=event_time, cursor=cursor)
 
                 conn.commit()

@@ -103,6 +103,11 @@ def create_tables():
         #     messageID
         # )
         # ''')
+
+        cursor.execute('''
+            DROP INDEX IF EXISTS idx_subxml_unique_key;
+        ''')
+
         cursor.execute('''
         CREATE UNIQUE INDEX IF NOT EXISTS idx_subxml_unique_key
         ON SubXMLData (
@@ -110,7 +115,8 @@ def create_tables():
             sub_table_id,
             type,
             username,
-            direction
+            direction,
+            messageID
         );
         ''')
 
@@ -1993,7 +1999,8 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
                     item.get("sub_id"),
                     record_type,
                     username,
-                    item.get("direction")
+                    item.get("direction"),
+                    item.get("messageID")
                 ))
 
         # 如果没有需要检查的，避免执行无意义 SQL
@@ -2006,16 +2013,17 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
                     sub_id TEXT,
                     type TEXT,
                     username TEXT,
-                    direction TEXT
+                    direction TEXT,
+                    messageID TEXT
                 );
             """)
             cursor.executemany("""
-                INSERT INTO tmp_sub_keys (main_id, sub_id, type, username, direction)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO tmp_sub_keys (main_id, sub_id, type, username, direction, messageID)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, check_keys)
 
             cursor.execute("""
-                SELECT k.main_id, k.sub_id, k.type, k.username, k.direction
+                SELECT k.main_id, k.sub_id, k.type, k.username, k.direction, k.messageID
                 FROM tmp_sub_keys k
                 JOIN SubXMLData s
                 ON (
@@ -2023,7 +2031,8 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
                     k.sub_id = s.sub_table_id AND
                     k.type = s.type AND
                     k.username = s.username AND
-                    k.direction = s.direction
+                    k.direction = s.direction AND
+                    k.messageID = s.messageID
                 )
             """)
 
@@ -2047,12 +2056,14 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
             sub_id = item.get('sub_id')
             record_type = item.get('type')
             direction = item.get('direction')
+            message_id = item.get('messageID')
 
-            key = (main_id, sub_id, record_type, username, direction)
+            key = (main_id, sub_id, record_type, username, direction, message_id)
 
             # 判断是否重复
             if record_type in check_types and key in existing_set:
-                logging.info(f"记录已存在，跳过插入: main_id={main_id}, sub_id={sub_id}, type={record_type}")
+                logging.info(
+                    f"记录已存在，跳过插入: main_id={main_id}, sub_id={sub_id}, type={record_type}, messageID={message_id}")
                 continue
 
             if sub_id is None:
@@ -2070,7 +2081,7 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
                     item.get('event_time'),
                     username,
                     direction,
-                    item.get('messageID'),
+                    message_id,
                     item.get('CR')
                 ))
                 if cursor.fetchone():
@@ -2085,7 +2096,7 @@ def insert_sub_xml_data_login(cursor, sub_xml_data, username):
                 direction,
                 username,
                 item.get('CR', None),
-                item.get('messageID', None)
+                message_id
             ))
 
         # --- 第三阶段：批量插入 ---
@@ -2731,35 +2742,33 @@ def get_main_table_data_by_sequence(sequence):
     conn = None
     try:
         # 连接数据库
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            # 查询数据
+            cursor.execute(
+                '''
+                SELECT main_table_data 
+                FROM MainExcelTable 
+                WHERE sequence = ? AND deleted_at IS NULL
+                ''',
+                (sequence,)
+            )
+            result = cursor.fetchone()
 
-        # 查询数据
-        query = '''
-        SELECT main_table_data 
-        FROM MainExcelTable 
-        WHERE sequence = ? AND deleted_at IS NULL
-        '''
-        cursor.execute(query, (sequence,))
-        result = cursor.fetchone()
-
-        if result:
+            if not result:
+                raise ValueError(f"未找到 sequence 为 {sequence} 的记录或记录已被软删除")
             main_table_data = result[0]  # 获取查询结果
+            if not main_table_data:
+                raise ValueError("main_table_data 字段为空")
             # 尝试将 main_table_data 转为 JSON 格式
             try:
-                main_table_json = json.loads(main_table_data)
-            except json.JSONDecodeError:
-                raise ValueError("main_table_data 不是有效的 JSON 格式")
-            return main_table_json
-        else:
-            raise ValueError(f"未找到 sequence 为 {sequence} 的记录或记录已被软删除")
+                return json.loads(main_table_data)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"main_table_data 不是有效的 JSON 格式:{e}")
+
     except sqlite3.Error as e:
         # 捕获数据库操作异常
         raise RuntimeError(f"数据库操作失败: {e}")
-    finally:
-        # 确保关闭数据库连接
-        if conn:
-            conn.close()
 
 
 def get_airwaybill_ioss_trackingnumber(sub_sequence):
@@ -3622,6 +3631,108 @@ def get_signature_info_by_message_id_direction_and_username(message_id, directio
     except sqlite3.Error as e:
         print(f"Database error: {e}")
         return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_airwaybill_by_main_ids(username, main_ids):
+    """
+    根据 main_id 从 MainExcelTable 查询 AirWayBill
+
+    参数:
+        main_id (int/str): MainExcelTable
+
+    返回:
+        str: 对应的 AirWayBill。如果找不到，返回 ""。
+    """
+    if not main_ids:
+        return {}
+
+    conn = None
+    result = {}
+
+    try:
+        # 连接数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        placeholders = ",".join(["?"] * len(main_ids))
+
+        query = f"""
+            SELECT sequence, AirWayBill
+            FROM MainExcelTable
+            WHERE sequence IN ({placeholders})
+              AND username = ?
+              AND deleted_at IS NULL
+        """
+
+        params = main_ids + [username]
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        for main_id, airwaybill in rows:
+            result[main_id] = airwaybill if airwaybill else ""
+
+        return result
+
+    except sqlite3.DatabaseError as e:
+        logging.error(f"数据库错误: {e}，main_ids: {main_ids}")
+        print(f"数据库错误: {e}")
+    except Exception as e:
+        logging.error(f"未知错误: {e}，main_ids: {main_ids}")
+        print(f"未知错误: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_tracking_numbers_by_sub_ids(username, sub_ids):
+    """
+    根据 sub_table_id 从 SubExcelTable 查询 tracking number（sequence 字段）
+
+    参数:
+        sub_table_id (int/str): SubExcelTable
+
+    返回:
+        str: 对应的 tracking number。如果找不到，返回 ""。
+    """
+    if not sub_ids:
+        return {}
+
+    conn = None
+    result = {}
+
+    try:
+        # 连接数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        placeholders = ",".join(["?"] * len(sub_ids))
+
+        query = f"""
+            SELECT sequence, TrackingNumber
+            FROM SubExcelTable
+            WHERE sequence IN ({placeholders})
+              AND username = ?
+              AND deleted_at IS NULL
+        """
+
+        params = sub_ids + [username]
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        for sub_id, tracking_number in rows:
+            result[sub_id] = tracking_number if tracking_number else ""
+
+        return result
+
+    except sqlite3.DatabaseError as e:
+        logging.error(f"数据库错误: {e}，sub_ids: {sub_ids}")
+        print(f"数据库错误: {e}")
+    except Exception as e:
+        logging.error(f"未知错误: {e}，sub_ids: {sub_ids}")
+        print(f"未知错误: {e}")
     finally:
         if conn:
             conn.close()
