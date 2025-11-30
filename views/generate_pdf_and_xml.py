@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta
+
 import pandas as pd
+import pytz
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QComboBox, QCheckBox, QPushButton, QAbstractItemView,
-    QMessageBox, QHeaderView
+    QMessageBox, QHeaderView, QLabel, QDateTimeEdit
 )
 from PyQt5.QtCore import Qt
 
@@ -66,8 +69,8 @@ class GeneratePDFAndXML(QDialog):
         main_layout.addLayout(control_layout)
 
         # 表格
-        self.table = QTableWidget(0, 2)  # 10行3列的表格
-        self.table.setHorizontalHeaderLabels(["Select", "AirWayBill"])
+        self.table = QTableWidget(0, 3)  # 10行3列的表格
+        self.table.setHorizontalHeaderLabels(["Select", "AirWayBill", "Created Time"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setSizeAdjustPolicy(QTableWidget.AdjustToContents)  # 自适应内容
@@ -79,6 +82,35 @@ class GeneratePDFAndXML(QDialog):
 
         # 生成示例数据并填充表格
         self.create_data()
+
+        self.time_filter_layout = QHBoxLayout()
+
+        start_label = QLabel("Start Time:")
+        self.start_time_edit = QDateTimeEdit()
+        self.start_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.start_time_edit.setCalendarPopup(True)
+
+        end_label = QLabel("End Time:")
+        self.end_time_edit = QDateTimeEdit()
+        self.end_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.end_time_edit.setCalendarPopup(True)
+
+        self.filter_btn = QPushButton("Filter Time")
+
+        self.time_filter_layout.addWidget(start_label)
+        self.time_filter_layout.addWidget(self.start_time_edit)
+        self.time_filter_layout.addWidget(end_label)
+        self.time_filter_layout.addWidget(self.end_time_edit)
+        self.time_filter_layout.addWidget(self.filter_btn)
+
+        # 初始隐藏
+        for i in range(self.time_filter_layout.count()):
+            self.time_filter_layout.itemAt(i).widget().hide()
+
+        main_layout.addLayout(self.time_filter_layout)
+
+        # 绑定按钮事件
+        self.filter_btn.clicked.connect(self.filter_by_time)
 
         main_layout.addWidget(self.table)
 
@@ -98,77 +130,156 @@ class GeneratePDFAndXML(QDialog):
         self.select_all_checkbox.stateChanged.connect(self.select_all)
         self.deselect_all_checkbox.stateChanged.connect(self.deselect_all)
 
-    def create_data(self):
-        self.data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
-        """生成示例数据并填充到表格中"""
-        # 生成数据
-        pd_data = {
-            "AirWayBill": self.data[1]  # 示例AirWayBill
-        }
-        df = pd.DataFrame(pd_data)
+    def filter_by_time(self):
+        """根据选择的时间范围刷新表格"""
+        start_time = self.start_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+        end_time = self.end_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
 
-        row_count = len(self.data[0])
+        if hasattr(self, 'full_data'):
+            # **基于完整数据筛选，而不是 self.data**
+            self.update_list(self.full_data, start_time=start_time, end_time=end_time)
+
+        self.update_list(self.full_data, start_time=start_time, end_time=end_time)
+
+    def create_data(self):
+        # self.data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+        self.data = db.get_id_airwaybill_time_from_main_table_by_state_sent(self.username)
+        """生成示例数据并填充到表格中"""
+
+        ids = self.data[0]
+        airwaybills = self.data[1]
+        created_times = self.data[2] if len(self.data) > 2 else [""] * len(ids)  # 如果没有返回，填空
+
+        row_count = len(ids)
         self.table.setRowCount(row_count)
 
         # 填充表格
-        for row in range(df.shape[0]):
+        for row in range(row_count):
             checkbox = QCheckBox()
             self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-            self.table.setItem(row, 1, QTableWidgetItem(df.iloc[row]['AirWayBill']))  # AirWayBill列
+            awb = airwaybills[row] if airwaybills[row] is not None else ""
+            self.table.setItem(row, 1, QTableWidgetItem(awb))
+
+            # created_time
+            ctime = created_times[row] if created_times[row] is not None else ""
+            self.table.setItem(row, 2, QTableWidgetItem(str(ctime)))
 
     def update_table_data(self, selected_option):
-        """根据下拉框选项更新表格数据和结构"""
-        if selected_option in ["PDF-UPD", "XML-UPD"]:
-            # 获取 upd 数据
-            new_data = db.get_receive_upd(self.username)  # 返回类似 ([IDs], [AirWayBills], [Times]) 的格式
+        time_filter_options = [
+            "PDF-UPD", "XML-UPD",
+            "PDF-UPD-signed", "XML-UPD-signed",
+            "PDF-zcx03", "PDF-zcx64", "PDF-zcx65", "PDF-zc410",
+            "XML-zcx03", "XML-zcx64", "XML-zcx65", "XML-zc410"
+        ]
+
+        if selected_option in time_filter_options:
+            # 显示时间筛选控件
+            for i in range(self.time_filter_layout.count()):
+                self.time_filter_layout.itemAt(i).widget().show()
+
+            pl_tz = pytz.timezone("Europe/Warsaw")
+            pl_now = datetime.now(pl_tz)
+            one_week_ago = pl_now - timedelta(days=7)
+
+            self.start_time_edit.setDateTime(one_week_ago)
+            self.end_time_edit.setDateTime(pl_now)
+
+            if selected_option in ["PDF-UPD", "XML-UPD"]:
+                # 获取 upd 数据
+                new_data = db.get_receive_upd(self.username)  # 返回类似 ([IDs], [AirWayBills], [Times]) 的格式
+            elif selected_option in ["PDF-UPD-signed", "XML-UPD-signed"]:
+                # 获取 upd 数据
+                new_data = db.get_send_upd(self.username)  # 返回类似 ([IDs], [AirWayBills], [Times]) 的格式
+            else:
+                # 这里是选择出了upd意外的针对账户的数据
+                xml_type = self.option_to_xml_type[selected_option]
+                new_data = db.get_xml_data_by_type(self.username, [xml_type])
+
+            self.full_data = new_data
+
             self.update_list(new_data)
-        elif selected_option in ["PDF-UPD-signed", "XML-UPD-signed"]:
-            # 获取 upd 数据
-            new_data = db.get_send_upd(self.username)  # 返回类似 ([IDs], [AirWayBills], [Times]) 的格式
-            self.update_list(new_data)
-        elif selected_option in ['PDF-zc429', "PDF-zcx03", "PDF-zcx64", "PDF-zcx65", "PDF-zc410", "PDF-zc460",
-                                 'XML-zc429', "XML-zcx03", "XML-zcx64", "XML-zcx65", "XML-zc410", "XML-zc460"]:
-            # 这里是选择出了upd意外的针对账户的数据
-            xml_type = self.option_to_xml_type[selected_option]
-            new_data = db.get_xml_data_by_type(self.username, [xml_type])
-            self.update_list(new_data)
+
         else:
+            # 隐藏时间控件
+            for i in range(self.time_filter_layout.count()):
+                self.time_filter_layout.itemAt(i).widget().hide()
+
             # 获取默认数据
-            default_data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+            # default_data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+            default_data = db.get_id_airwaybill_time_from_main_table_by_state_sent(self.username)
             self.data = default_data
 
+            ids = default_data[0]
+            airwaybills = default_data[1]
+            created_times = default_data[2] if len(default_data) > 2 else [""] * len(ids)
+
             # 更新表格结构为 2 列
-            self.table.setColumnCount(2)
-            self.table.setHorizontalHeaderLabels(["Select", "AirWayBill"])
+            self.table.setColumnCount(3)
+            self.table.setHorizontalHeaderLabels(["Select", "AirWayBill", "Created Time"])
 
             # 填充表格数据
-            self.table.setRowCount(len(default_data[0]))
-            for row in range(len(default_data[0])):
+            # self.table.setRowCount(len(default_data[0]))
+            row_count = len(ids)
+            self.table.setRowCount(row_count)
+
+            for row in range(row_count):
                 checkbox = QCheckBox()
                 self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-                self.table.setItem(row, 1, QTableWidgetItem(default_data[1][row]))  # AirWayBill
 
-    def update_list(self, new_data):
-        new_data = [
-            [t[1] for t in new_data],  # 第1个元素列表 main_id
-            [t[5] for t in new_data],  # 第5个元素列表 event_time
-            [t[0] for t in new_data],  # 第0个元素列表 id
-            [t[10] for t in new_data],  # 第10个元素列表 id
-        ]
-        self.data = new_data
+                # AirWayBill
+                awb = airwaybills[row] if airwaybills[row] is not None else ""
+                self.table.setItem(row, 1, QTableWidgetItem(awb))
+
+                # created_time
+                ctime = created_times[row] if created_times[row] is not None else ""
+                self.table.setItem(row, 2, QTableWidgetItem(str(ctime)))
+
+    def update_list(self, new_data, start_time=None, end_time=None):
+
+        # 重新组织数据结构
+        main_ids = [t[1] for t in new_data]
+        event_times = [t[5] for t in new_data]
+        ids = [t[0] for t in new_data]
+        message_ids = [t[10] for t in new_data]
+
+        # 时间过滤
+        filtered_indices = []
+        for i, t in enumerate(event_times):
+            if not t:
+                continue
+            t_dt = pd.to_datetime(t)  # 将字符串转为 datetime
+            if start_time:
+                start_dt = pd.to_datetime(start_time)
+                if t_dt < start_dt:
+                    continue
+            if end_time:
+                end_dt = pd.to_datetime(end_time)
+                if t_dt > end_dt:
+                    continue
+            filtered_indices.append(i)
+
+        # 筛选后的数据
+        main_ids = [main_ids[i] for i in filtered_indices]
+        event_times = [event_times[i] for i in filtered_indices]
+        ids = [ids[i] for i in filtered_indices]
+        message_ids = [message_ids[i] for i in filtered_indices]
+
+        self.data = [main_ids, event_times, ids, message_ids]
 
         # 更新表格结构为 4 列
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Select", "ID", "message_id", "Event Time"])
 
         # 填充表格数据
-        self.table.setRowCount(len(new_data[0]))
-        for row in range(len(new_data[0])):
+        # self.table.setRowCount(len(new_data[0]))
+        self.table.setRowCount(len(main_ids))
+        # for row in range(len(new_data[0])):
+        for row in range(len(main_ids)):
             checkbox = QCheckBox()
             self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-            self.table.setItem(row, 1, QTableWidgetItem(new_data[0][row]))  # main_id
-            self.table.setItem(row, 2, QTableWidgetItem(new_data[3][row]))  # message_id
-            self.table.setItem(row, 3, QTableWidgetItem(new_data[1][row]))  # Time
+            self.table.setItem(row, 1, QTableWidgetItem(main_ids[row]))  # main_id
+            self.table.setItem(row, 2, QTableWidgetItem(message_ids[row]))  # message_id
+            self.table.setItem(row, 3, QTableWidgetItem(str(event_times[row])))  # Time
 
     def on_confirm(self):
         """获取所有选中的ID列数据，作为整型列表返回"""
@@ -199,12 +310,12 @@ class GeneratePDFAndXML(QDialog):
                     self.accept()  # 关闭原对话框
                 else:
                     print("已取消操作，返回到第一个对话框。")
-        elif selected_option in ["PDF-UPD", "PDF-UPD-signed", "XML-UPD", "XML-UPD-signed", "PDF-zc429", "XML-zc429",
-                                 "PDF-zcx03", "PDF-zcx64", "PDF-zcx65", "PDF-zc410", "PDF-zc460",
-                                 "XML-zcx03", "XML-zcx64", "XML-zcx65", "XML-zc410", "XML-zc460"]:
+        elif selected_option in ["PDF-UPD", "PDF-UPD-signed", "XML-UPD", "XML-UPD-signed",
+                                 "PDF-zcx03", "PDF-zcx64", "PDF-zcx65", "PDF-zc410",
+                                 "XML-zcx03", "XML-zcx64", "XML-zcx65", "XML-zc410"]:
             main_id_list = []
-            if selected_option in ["PDF-UPD", "PDF-UPD-signed", "PDF-zc429", "PDF-zcx03", "PDF-zcx64", "PDF-zcx65",
-                                   "PDF-zc410", "PDF-zc460"]:
+            if selected_option in ["PDF-UPD", "PDF-UPD-signed", "PDF-zcx03", "PDF-zcx64", "PDF-zcx65",
+                                   "PDF-zc410"]:
                 for select_id in selected_ids:
                     for i in range(len(self.data[0])):
                         if select_id == self.data[0][i]:
@@ -220,7 +331,8 @@ class GeneratePDFAndXML(QDialog):
             else:
                 QMessageBox.warning(self, "Error", 'Login failed: the account password is incorrect')
                 return  # 返回发送界面，保持对话框打开
-        elif selected_option in ['PDF-zc428', 'XML-zc428', 'PDF-zcx16', 'XML-zcx16']:
+        elif selected_option in ["PDF-zc428", "XML-zc428", "PDF-zcx16", "XML-zcx16",
+                                 "PDF-zc429", "XML-zc429", "PDF-zc460", "XML-zc460"]:
             if self.token:
                 dialog = SavePDFOrXML(self.username, selected_option, selected_ids, self.token)
                 if dialog.exec_() == QDialog.Accepted:

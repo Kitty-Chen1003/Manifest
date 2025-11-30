@@ -2171,6 +2171,54 @@ def get_id_and_airwaybill_from_main_table_by_state_sent(username):
         if conn:
             conn.close()
 
+def get_id_airwaybill_time_from_main_table_by_state_sent(username):
+    """
+    获取指定用户名且状态为 'Sent' 的 MainExcelTable 中的 sequence 和 AirWayBill。
+
+    :param username: 用户名
+    :return: 返回包含两个列表：[sequence, AirWayBill]
+    """
+    conn = None
+    cursor = None
+    try:
+        # 创建数据库连接
+        conn = sqlite3.connect(db_path)  # 替换为您的数据库路径
+        cursor = conn.cursor()
+
+        # 执行查询，获取 sequence 和 AirWayBill
+        cursor.execute('''
+            SELECT sequence, AirWayBill, created_at
+            FROM MainExcelTable 
+            WHERE username = ? 
+            AND state = 'Sent' 
+            AND deleted_at IS NULL
+            ORDER BY created_at DESC
+        ''', (username,))
+
+        rows = cursor.fetchall()
+
+        if rows:
+            sequences, airway_bills, created_times = zip(*rows)
+
+            logging.info(f"成功获取用户名为 {username} 的 'Sent' 状态的记录，序列号数：{len(sequences)}")
+            print(f"成功获取用户名为 {username} 的 'Sent' 状态的记录，序列号数：{len(sequences)}")
+
+            return [list(sequences), list(airway_bills), list(created_times)]
+        else:
+            return [[], [], []]
+
+    except sqlite3.Error as e:
+        # 捕获数据库相关错误
+        logging.error(f"数据库错误: {e}")
+        return None
+    except Exception as e:
+        # 捕获其他未知错误
+        logging.error(f"获取数据时发生错误: {e}")
+        return None
+    finally:
+        # 确保数据库连接关闭
+        if conn:
+            conn.close()
 
 def get_id_and_airwaybill_from_main_table_by_state_not_sent(username):
     """
@@ -3267,6 +3315,60 @@ def get_cr_air_way_bill(username, sequence):
     except Exception as e:
         print(f"查询数据时发生错误: {e}")
         return None
+
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_all_air_way_bills(username, sequence_list):
+    """
+    批量查询 AirWayBill，避免重复数据库查询。
+
+    参数:
+        username (str): 用户名
+        sequence_list (list[str]): main_id 列表
+
+    返回:
+        dict: {sequence: AirWayBill}
+    """
+    if not sequence_list:
+        return {}
+
+    # 去重以减少 SQL 查询量
+    unique_sequences = list(set(sequence_list))
+
+    conn = None
+    awb_map = {}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # 构造 IN 查询
+        placeholders = ",".join(["?"] * len(unique_sequences))
+
+        query = f"""
+        SELECT sequence, AirWayBill
+        FROM MainExcelTable
+        WHERE username = ? AND sequence IN ({placeholders});
+        """
+
+        # 参数 = (username, seq1, seq2, ...)
+        params = [username] + unique_sequences
+
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+
+        # 构造映射
+        for seq, awb in results:
+            awb_map[seq] = awb
+
+        return awb_map
+
+    except Exception as e:
+        print(f"批量查询 AirWayBill 时发生错误: {e}")
+        return {}
 
     finally:
         if conn:

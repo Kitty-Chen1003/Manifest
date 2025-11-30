@@ -109,15 +109,15 @@ class SavePDFOrXML(QDialog):
             self.handle_pdf_by_sub_id(self.selected_ids, save_path)
             QMessageBox.information(self, "Success", 'PDF saved successfully!')
             self.accept()  # 关闭对话框
-        elif self.selected_option in ['PDF-UPD', 'PDF-UPD-signed', 'PDF-zc429', "PDF-zcx03", "PDF-zcx64", "PDF-zcx65",
-                                      "PDF-zc410", "PDF-zc460"]:
+        elif self.selected_option in ['PDF-UPD', 'PDF-UPD-signed', "PDF-zcx03", "PDF-zcx64", "PDF-zcx65",
+                                      "PDF-zc410"]:
             self.handle_pdf_upd(self.selected_ids, save_path, self.selected_option)
             QMessageBox.information(self, "Success", 'PDF saved successfully!')
             self.accept()  # 关闭对话框
-        elif self.selected_option in ['PDF-zc428', 'PDF-zcx16']:
+        elif self.selected_option in ['PDF-zc428', 'PDF-zcx16', 'PDF-zc429', "PDF-zc460"]:
             if self.token:
                 self.handle_pdf_cr(self.selected_ids, save_path, self.selected_option)
-                QMessageBox.information(self, "Success", 'XML saved successfully!')
+                QMessageBox.information(self, "Success", 'PDF saved successfully!')
                 self.accept()  # 关闭对话框
         elif self.selected_option == 'XML':
             if self.token:
@@ -130,8 +130,8 @@ class SavePDFOrXML(QDialog):
                 self.handle_xml(self.selected_ids, save_path, xml)
                 QMessageBox.information(self, "Success", 'XML saved successfully!')
                 self.accept()  # 关闭对话框
-        elif self.selected_option in ['XML-UPD', 'XML-UPD-signed', 'XML-zc429', "XML-zcx03", "XML-zcx64", "XML-zcx65",
-                                      "XML-zc410", "XML-zc460"]:
+        elif self.selected_option in ['XML-UPD', 'XML-UPD-signed', "XML-zcx03", "XML-zcx64", "XML-zcx65",
+                                      "XML-zc410"]:
             if self.token:
                 xml_type = self.option_to_xml_type[self.selected_option]
                 data = {
@@ -143,7 +143,7 @@ class SavePDFOrXML(QDialog):
                 self.handle_xml_udp(save_path, xml, self.selected_option)
                 QMessageBox.information(self, "Success", 'XML saved successfully!')
                 self.accept()  # 关闭对话框
-        elif self.selected_option in ['XML-zc428', 'XML-zcx16']:
+        elif self.selected_option in ['XML-zc428', 'XML-zcx16', 'XML-zc429', "XML-zc460"]:
             if self.token:
                 xml_type = self.option_to_xml_type[self.selected_option]
                 data = {
@@ -252,11 +252,11 @@ class SavePDFOrXML(QDialog):
     def handle_pdf_cr(self, main_id_list, save_path, dir_name):
         try:
             new_path = self.create_folder(save_path, dir_name)
+            awb_map = db.get_all_air_way_bills(self.username, main_id_list)
+            xml_type = self.option_to_xml_type[dir_name]
             for main_id in main_id_list:
-                air_way_bill = db.get_cr_air_way_bill(self.username, main_id)
+                air_way_bill = awb_map.get(main_id)
                 self.create_folder(new_path, air_way_bill)
-
-                xml_type = self.option_to_xml_type[dir_name]
                 datas = db.get_cr_xml_json_data(self.username, main_id, xml_type)
                 for data in datas:
                     xml_json_data = json.loads(data.get('xml_json_data'))
@@ -390,6 +390,11 @@ class SavePDFOrXML(QDialog):
             # 创建目标文件夹
             new_path = self.create_folder(save_path, dir_name)
 
+            main_ids = [d.get("main_id") for d in xml_data_list]
+            awb_map = db.get_all_air_way_bills(self.username, main_ids)
+
+            created_dirs = set()
+
             for data in xml_data_list:
                 # 提取字典中的属性
                 main_id = data.get("main_id")
@@ -398,19 +403,22 @@ class SavePDFOrXML(QDialog):
                 xml_type = data.get("type")
                 message_id = data.get("messageID")
 
-                air_way_bill = db.get_cr_air_way_bill(self.username, main_id)
-                self.create_folder(new_path, air_way_bill)
-
                 # 检查必须的字段是否存在
                 if not main_id or not xml_data or not event_time:
                     print(f"数据缺失，跳过: {data}")
                     continue
 
+                air_way_bill = awb_map.get(main_id)
+                # self.create_folder(new_path, air_way_bill)
+                if air_way_bill not in created_dirs:
+                    self.create_folder(new_path, air_way_bill)
+                    created_dirs.add(air_way_bill)
+
                 # 生成文件名：main_id_event_time.xml
                 # 替换 event_time 中不合法的文件名字符（如冒号）
                 # sanitized_event_time = event_time.replace(":", "_").replace(" ", "_")
                 file_name = f"{xml_type}-{message_id}-{event_time}.xml"
-                file_name = file_name.replace(":", "-")
+                # file_name = file_name.replace(":", "-")
                 xml_file_path = self.generate_file_path(new_path, [air_way_bill], file_name)
 
                 # 保存 xml_data 为 XML 文件
