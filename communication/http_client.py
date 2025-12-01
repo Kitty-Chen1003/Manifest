@@ -308,7 +308,7 @@ def upload_excel_data(token, data, file_path, password, signature_information):
         signed_datas = []
         datas_subid_lrn = []
 
-        certificate = prepare_certificate(file_path, password)
+        # certificate = prepare_certificate(file_path, password)
 
         # 并行签名函数，增加耗时输出
         def sign_single_xml(d):
@@ -323,19 +323,33 @@ def upload_excel_data(token, data, file_path, password, signature_information):
                 print(f"Missing key in data: {e}")
                 raise KeyError(f"Missing key in data: {e}")
 
-            try:
-                return signature.sign_xml_with_reused_certificate(
-                    xml_data.encode('utf-8'),
-                    certificate,
-                    signature.SignedSignatureProperties(
-                        signer=signature_information['name'],
-                        phone=signature_information['phoneNumber'],
-                        email=signature_information['eMailAddress']
+            for attempt in range(1, 6):
+                try:
+                    signed = signature.sign_xml(
+                        xml_data.encode('utf-8'),
+                        file_path,
+                        password,
+                        signature.SignedSignatureProperties(
+                            signer=signature_information['name'],
+                            phone=signature_information['phoneNumber'],
+                            email=signature_information['eMailAddress']
+                        )
                     )
-                ).decode('utf-8')
-            except Exception as e:
-                print(f"处理 XML 文件时出错: {e}")
-                raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+                    if attempt > 1:
+                        print(f"[Retry] sub_id={sub_id}第 {attempt}/5 次签名成功...")
+                    else:
+                        print(f"[签名] sub_id={sub_id} 第 1/5 次签名成功...")
+                    return signed.decode('utf-8')
+                except Exception as e:
+                    # print(f"处理 XML 文件时出错: {e}")
+                    print(f"[签名失败] sub_id={sub_id}第 {attempt}/5 次签名失败...，错误：{e}")
+                    # raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+
+                    # 如果是第 5 次依然失败 → 抛出，让主线程失败
+                    if attempt == 5:
+                        raise RuntimeError(
+                            f"Sub ID {sub_id} signing failed: {e}"
+                        )
 
         # 每批处理大小
         BATCH_SIZE = 500
@@ -652,7 +666,7 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
         #     root = etree.fromstring(xml_string.encode('utf-8'), parser)
         #     return etree.tostring(root, pretty_print=True, encoding='unicode')
 
-        def sign_single_xml_parallel(d, certificate, sig_info):
+        def sign_single_xml_parallel(d, sig_info):
             try:
                 main_id = d['main_id']
                 sub_id = d['sub_id']
@@ -667,31 +681,42 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
             if type_ == 'upd':
                 xml_data = format_xml(xml_data)
 
-            try:
-                signed_xml = signature.sign_xml_with_reused_certificate(
-                    xml_data.encode('utf-8'),
-                    certificate,
-                    signature.SignedSignatureProperties(
-                        signer=sig_info['name'],
-                        phone=sig_info['phoneNumber'],
-                        email=sig_info['eMailAddress']
-                    )
-                ).decode('utf-8')
+            for attempt in range(1, 6):
+                try:
+                    signed_xml = signature.sign_xml(
+                        xml_data.encode('utf-8'),
+                        file_path,
+                        password,
+                        signature.SignedSignatureProperties(
+                            signer=sig_info['name'],
+                            phone=sig_info['phoneNumber'],
+                            email=sig_info['eMailAddress']
+                        )
+                    ).decode('utf-8')
 
-                return {
-                    'main_id': main_id,
-                    'sub_id': sub_id,
-                    'xml_data': signed_xml,
-                    'type': type_,
-                    'message_id': message_id,
-                    'signature_information': sig_info,
-                    'direction': 'send'
-                }
+                    if attempt > 1:
+                        print(f"[Retry] sub_id={sub_id}第 {attempt}/5 次签名成功...")
+                    else:
+                        print(f"[签名] sub_id={sub_id} 第 1/5 次签名成功...")
 
-            except Exception as e:
-                print(f"处理 XML 文件时出错: {e}")
-                raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+                    return {
+                        'main_id': main_id,
+                        'sub_id': sub_id,
+                        'xml_data': signed_xml,
+                        'type': type_,
+                        'message_id': message_id,
+                        'signature_information': sig_info,
+                        'direction': 'send'
+                    }
 
+                except Exception as e:
+                    # print(f"处理 XML 文件时出错: {e}")
+                    print(f"[签名失败] sub_id={sub_id}第 {attempt}/5 次签名失败...，错误：{e}")
+                    # raise RuntimeError(f"Sub ID {sub_id} signing failed: {e}")
+                    if attempt == 5:
+                        raise RuntimeError(
+                            f"Sub ID {sub_id} signing failed: {e}"
+                        )
 
         USE_MULTITHREADING = True
         BATCH_SIZE = 500
@@ -702,7 +727,7 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
             print("使用多线程模式签名 XML...")
 
             # 一次性加载证书
-            certificate = prepare_certificate(file_path, password)
+            # certificate = prepare_certificate(file_path, password)
 
             # 按 main_id 分组（避免频繁查数据库）
             mainid_to_datas = {}
@@ -729,7 +754,7 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
 
                         for d in batch:
                             futures.append(
-                                executor.submit(sign_single_xml_parallel, d, certificate, sig_info)
+                                executor.submit(sign_single_xml_parallel, d, sig_info)
                             )
 
                 # ----------6) gather results-----------------
