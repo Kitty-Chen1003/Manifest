@@ -1064,20 +1064,33 @@ class MainWindow(QMainWindow):
 
             print(selected_files_path)
 
+            key_map = {}
+
+            system_to_user = dict(zip(self.list_fixed_key, list_new_keys))
+            user_norm_to_system = {normalize(user_col): system_col
+                                   for system_col, user_col in system_to_user.items()}
+
             for file_path in selected_files_path:
                 try:
                     input_file = pd.read_excel(file_path, dtype={'TrackingNumber': str, 'ConsigneeNameID': str,
                                                                  'ConsigneeName': str, 'HSCode': str})
 
                     # === 列名标准化处理 ===
-                    normalized_columns = {}
+                    # normalized_columns = {}
+                    # for col in input_file.columns:
+                    #     col_lower = col.lower()
+                    #     if col_lower == "dsk":
+                    #         normalized_columns[col] = "Dsk"
+                    #     elif col_lower in ["invoice number", "invoicenumber"]:
+                    #         normalized_columns[col] = "InvoiceNumber"
+                    # input_file.rename(columns=normalized_columns, inplace=True)
+
                     for col in input_file.columns:
-                        col_lower = col.lower()
-                        if col_lower == "dsk":
-                            normalized_columns[col] = "Dsk"
-                        elif col_lower in ["invoice number", "invoicenumber"]:
-                            normalized_columns[col] = "InvoiceNumber"
-                    input_file.rename(columns=normalized_columns, inplace=True)
+                        col_norm = normalize(col)
+                        if col_norm in user_norm_to_system:
+                            key_map[col] = user_norm_to_system[col_norm]  # Excel列名 -> 系统列名
+
+                    input_file.rename(columns=key_map, inplace=True)
 
                     # 将 nan 值替换为空字符串
                     input_file.fillna('', inplace=True)
@@ -1093,19 +1106,20 @@ class MainWindow(QMainWindow):
                             next_idx += 1
 
                     # Check goodsitem previous document
-                    if input_information.get("goodsitem previous document"):
-                        for item in input_information["goodsitem previous document"]:
-                            if str(item.get("reference number", "")).strip() == "1":
-                                if "Dsk" not in input_file.columns:
-                                    self.show_error(
-                                        "goodsitem previous document default reading rule requires the Dsk column. "
-                                        "Please remove related content if missing.")
-                                    return False
-                                if input_file["Dsk"].replace('', pd.NA).isna().any():
-                                    self.show_error(
-                                        "goodsitem previous document default reading rule requires the Dsk column, "
-                                        "but it is empty. Please remove related content.")
-                                    return False
+                    for section in ["goodsitem previous document", "goodshipment previous document"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                if str(item.get("reference number", "")).strip() == "1":
+                                    if "Dsk" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} default reading rule requires the Dsk column. "
+                                            "Please remove related content if missing.")
+                                        return False
+                                    if input_file["Dsk"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} previous document default reading rule requires the Dsk column, "
+                                            f"but it is empty. Please remove related content.")
+                                        return False
 
                     # Check goodsitem supporting document & goodshipment supporting document
                     for section in ["goodsitem supporting document", "goodshipment supporting document"]:
@@ -1218,18 +1232,15 @@ class MainWindow(QMainWindow):
                 files = manifest.process_manifests(input_file_backup, file_path)
 
                 processed_rows = []
-                system_to_user = dict(zip(self.list_fixed_key, list_new_keys))
-                user_norm_to_system = {normalize(user_col): system_col
-                                       for system_col, user_col in system_to_user.items()}
 
                 for file in files:
-                    key_map = {}
-                    for col in file.columns:
-                        col_norm = normalize(col)
-                        if col_norm in user_norm_to_system:
-                            key_map[col] = user_norm_to_system[col_norm]  # Excel列名 -> 系统列名
-
-                    file.rename(columns=key_map, inplace=True)
+                    # key_map = {}
+                    # for col in file.columns:
+                    #     col_norm = normalize(col)
+                    #     if col_norm in user_norm_to_system:
+                    #         key_map[col] = user_norm_to_system[col_norm]  # Excel列名 -> 系统列名
+                    #
+                    # file.rename(columns=key_map, inplace=True)
 
                     # 选取要保留的系统列（不存在的列直接舍弃）
                     useful_cols = [c for c in self.list_fixed_key if c in file.columns]
