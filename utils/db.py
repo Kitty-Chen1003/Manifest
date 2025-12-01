@@ -302,7 +302,6 @@ def store_xml_data(cursor, main_table_id, sub_table_id, type_value, xml_json_dat
         )
         # # 提交事务
         # conn.commit()
-        print("XML 数据存储成功")
 
     except sqlite3.DatabaseError as e:
         # if conn:
