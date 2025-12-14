@@ -18,6 +18,7 @@ from views.generate_pdf_and_xml_by_sub_id import GeneratePDFAndXMLBySubID
 class GeneratePDFAndXML(QDialog):
     def __init__(self, username, token):
         super().__init__()
+        self.full_data = None
         self.username = username
         self.token = token
 
@@ -135,10 +136,6 @@ class GeneratePDFAndXML(QDialog):
         start_time = self.start_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
         end_time = self.end_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
 
-        if hasattr(self, 'full_data'):
-            # **基于完整数据筛选，而不是 self.data**
-            self.update_list(self.full_data, start_time=start_time, end_time=end_time)
-
         self.update_list(self.full_data, start_time=start_time, end_time=end_time)
 
     def create_data(self):
@@ -242,20 +239,25 @@ class GeneratePDFAndXML(QDialog):
         ids = [t[0] for t in new_data]
         message_ids = [t[10] for t in new_data]
 
+        start_dt = None
+        end_dt = None
+
+        if start_time:
+            start_dt = pd.to_datetime(start_time)
+
+        if end_time:
+            end_dt = pd.to_datetime(end_time)
+
         # 时间过滤
         filtered_indices = []
         for i, t in enumerate(event_times):
             if not t:
                 continue
             t_dt = pd.to_datetime(t)  # 将字符串转为 datetime
-            if start_time:
-                start_dt = pd.to_datetime(start_time)
-                if t_dt < start_dt:
-                    continue
-            if end_time:
-                end_dt = pd.to_datetime(end_time)
-                if t_dt > end_dt:
-                    continue
+            if start_dt and t_dt < start_dt:
+                continue
+            if end_dt and t_dt > end_dt:
+                continue
             filtered_indices.append(i)
 
         # 筛选后的数据

@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta
+
 import pandas as pd
+import pytz
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QComboBox, QCheckBox, QPushButton, QAbstractItemView,
-    QMessageBox, QHeaderView
+    QMessageBox, QHeaderView, QLabel, QDateTimeEdit
 )
 from PyQt5.QtCore import Qt
 from views.send_message_by_sub_id import SendMessageBySubID  # 导入子对话框
@@ -23,6 +26,8 @@ class SendMessageByMainID(QDialog):
         self.data = None
 
         self.select_opt = None
+        self.is_upd_mode = None
+        self.full_upd_data = None
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -42,8 +47,8 @@ class SendMessageByMainID(QDialog):
         main_layout.addLayout(control_layout)
 
         # 表格
-        self.table = QTableWidget(0, 2)  # 10行3列的表格
-        self.table.setHorizontalHeaderLabels(["Select", "AirWayBill"])
+        self.table = QTableWidget(0, 3)  # 10行3列的表格
+        self.table.setHorizontalHeaderLabels(["Select", "AirWayBill", "Created Time"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setSizeAdjustPolicy(QTableWidget.AdjustToContents)  # 自适应内容
@@ -55,6 +60,39 @@ class SendMessageByMainID(QDialog):
 
         # 生成示例数据并填充表格
         self.create_data()
+
+        self.time_filter_layout = QHBoxLayout()
+
+        start_label = QLabel("Start Time:")
+        self.start_time_edit = QDateTimeEdit()
+        self.start_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.start_time_edit.setCalendarPopup(True)
+
+        end_label = QLabel("End Time:")
+        self.end_time_edit = QDateTimeEdit()
+        self.end_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.end_time_edit.setCalendarPopup(True)
+
+        self.filter_btn = QPushButton("Filter Time")
+
+        self.time_filter_layout.addWidget(start_label)
+        self.time_filter_layout.addWidget(self.start_time_edit)
+        self.time_filter_layout.addWidget(end_label)
+        self.time_filter_layout.addWidget(self.end_time_edit)
+        self.time_filter_layout.addWidget(self.filter_btn)
+
+        self.today_btn = QPushButton("Today")
+        self.time_filter_layout.addWidget(self.today_btn)
+        self.today_btn.clicked.connect(self.filter_today)
+
+        # 初始隐藏
+        for i in range(self.time_filter_layout.count()):
+            self.time_filter_layout.itemAt(i).widget().hide()
+
+        main_layout.addLayout(self.time_filter_layout)
+
+        # 绑定按钮事件
+        self.filter_btn.clicked.connect(self.filter_by_time)
 
         main_layout.addWidget(self.table)
 
@@ -74,65 +112,183 @@ class SendMessageByMainID(QDialog):
         self.select_all_checkbox.stateChanged.connect(self.select_all)
         self.deselect_all_checkbox.stateChanged.connect(self.deselect_all)
 
-    def create_data(self):
-        self.data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
-        """生成示例数据并填充到表格中"""
-        # 生成数据
-        pd_data = {
-            "AirWayBill": self.data[1]  # 示例AirWayBill
-        }
-        df = pd.DataFrame(pd_data)
+    def filter_by_time(self, today_only=False):
+        if not self.is_upd_mode or self.full_upd_data is None:
+            return
 
-        row_count = len(self.data[0])
+        if today_only:
+
+            pl_tz = pytz.timezone("Europe/Warsaw")
+            pl_now = datetime.now(pl_tz)
+            start_dt = pl_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        else:
+            """根据选择的时间范围刷新表格"""
+            start_dt = pd.to_datetime(
+                self.start_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+            )
+
+        end_dt = pd.to_datetime(
+            self.end_time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+        )
+        filtered = [[], [], [], []]
+
+        for i, t in enumerate(self.full_upd_data[1]):
+
+            if not t:
+                continue
+
+            try:
+                event_time = pd.to_datetime(t)
+            except Exception:
+                continue
+
+            if start_dt <= event_time <= end_dt:
+                for col in range(4):
+                    filtered[col].append(self.full_upd_data[col][i])
+
+        self.update_upd_table(filtered)
+
+    def filter_today(self):
+        if not self.is_upd_mode or self.full_upd_data is None:
+            return
+
+        pl_tz = pytz.timezone("Europe/Warsaw")
+        pl_now = datetime.now(pl_tz)
+        one_week_ago = pl_now - timedelta(days=7)
+
+        self.start_time_edit.setDateTime(one_week_ago)
+        self.end_time_edit.setDateTime(pl_now)
+
+        pl_tz = pytz.timezone("Europe/Warsaw")
+        now = datetime.now(pl_tz)
+
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        self.start_time_edit.setDateTime(start_of_day)
+        self.end_time_edit.setDateTime(end_of_day)
+
+        # 复用原有时间筛选逻辑
+        self.filter_by_time()
+
+    def create_data(self):
+        # self.data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+        self.data = db.get_id_airwaybill_time_from_main_table_by_state_sent(self.username)
+        """生成示例数据并填充到表格中"""
+
+        ids = self.data[0]
+        airwaybills = self.data[1]
+        created_times = self.data[2] if len(self.data) > 2 else [""] * len(ids)  # 如果没有返回，填空
+
+        row_count = len(ids)
         self.table.setRowCount(row_count)
 
         # 填充表格
-        for row in range(df.shape[0]):
+        for row in range(row_count):
             checkbox = QCheckBox()
             self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-            self.table.setItem(row, 1, QTableWidgetItem(df.iloc[row]['AirWayBill']))  # AirWayBill列
+            awb = airwaybills[row] if airwaybills[row] is not None else ""
+            self.table.setItem(row, 1, QTableWidgetItem(awb))
+
+            # created_time
+            ctime = created_times[row] if created_times[row] is not None else ""
+            self.table.setItem(row, 2, QTableWidgetItem(str(ctime)))
+
+    def update_upd_table(self, data):
+        """data 格式: [main_ids, event_times, ids, message_ids]"""
+        self.data = data  # ⭐ 当前显示数据
+
+        # 更新表格结构为 4 列
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Select", "ID", "message_id", "Event Time"])
+
+        # 填充表格数据
+        self.table.setRowCount(len(data[0]))
+        for row in range(len(data[0])):
+            checkbox = QCheckBox()
+            self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
+            self.table.setItem(row, 1, QTableWidgetItem(str(data[0][row])))  # ID
+            self.table.setItem(row, 2, QTableWidgetItem(str(data[3][row])))  # ID
+            self.table.setItem(row, 3, QTableWidgetItem(data[1][row]))  # Time
 
     def update_table_data(self, selected_option):
         """根据下拉框选项更新表格数据和结构"""
         if selected_option == "upd":
+            self.is_upd_mode = True
+
+            for i in range(self.time_filter_layout.count()):
+                self.time_filter_layout.itemAt(i).widget().show()
+
+            pl_tz = pytz.timezone("Europe/Warsaw")
+            pl_now = datetime.now(pl_tz)
+            one_week_ago = pl_now - timedelta(days=7)
+
+            self.start_time_edit.setDateTime(one_week_ago)
+            self.end_time_edit.setDateTime(pl_now)
+
             # 获取 upd 数据
             new_data = db.get_receive_upd(self.username, flag=1)  # 返回类似 ([IDs], [AirWayBills], [Times]) 的格式
-            new_data = [
+            self.full_upd_data = [
                 [t[1] for t in new_data],  # 第0个元素列表 main_id
                 [t[5] for t in new_data],  # 第5个元素列表 event_time
                 [t[0] for t in new_data],  # 第1个元素列表 ID
                 [t[10] for t in new_data],  # 第10个元素列表 main_id
             ]
-            self.data = new_data
 
-            # 更新表格结构为 4 列
-            self.table.setColumnCount(4)
-            self.table.setHorizontalHeaderLabels(["Select", "ID", "message_id", "Event Time"])
-
-            # 填充表格数据
-            self.table.setRowCount(len(new_data[0]))
-            for row in range(len(new_data[0])):
-                checkbox = QCheckBox()
-                self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-                self.table.setItem(row, 1, QTableWidgetItem(str(new_data[0][row])))  # ID
-                self.table.setItem(row, 2, QTableWidgetItem(str(new_data[3][row])))  # ID
-                self.table.setItem(row, 3, QTableWidgetItem(new_data[1][row]))  # Time
+            # 初始显示：不加时间过滤
+            self.update_upd_table(self.full_upd_data)
+            # self.data = new_data
+            #
+            # # 更新表格结构为 4 列
+            # self.table.setColumnCount(4)
+            # self.table.setHorizontalHeaderLabels(["Select", "ID", "message_id", "Event Time"])
+            #
+            # # 填充表格数据
+            # self.table.setRowCount(len(new_data[0]))
+            # for row in range(len(new_data[0])):
+            #     checkbox = QCheckBox()
+            #     self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
+            #     self.table.setItem(row, 1, QTableWidgetItem(str(new_data[0][row])))  # ID
+            #     self.table.setItem(row, 2, QTableWidgetItem(str(new_data[3][row])))  # ID
+            #     self.table.setItem(row, 3, QTableWidgetItem(new_data[1][row]))  # Time
 
         else:
+            self.is_upd_mode = False
+            self.full_upd_data = None
+
+            for i in range(self.time_filter_layout.count()):
+                self.time_filter_layout.itemAt(i).widget().hide()
+
             # 获取默认数据
-            default_data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+            # default_data = db.get_id_and_airwaybill_from_main_table_by_state_sent(self.username)
+            default_data = db.get_id_airwaybill_time_from_main_table_by_state_sent(self.username)
             self.data = default_data
 
+            ids = default_data[0]
+            airwaybills = default_data[1]
+            created_times = default_data[2] if len(default_data) > 2 else [""] * len(ids)
+
             # 更新表格结构为 2 列
-            self.table.setColumnCount(2)
-            self.table.setHorizontalHeaderLabels(["Select", "AirWayBill"])
+            self.table.setColumnCount(3)
+            self.table.setHorizontalHeaderLabels(["Select", "AirWayBill", "Created Time"])
 
             # 填充表格数据
-            self.table.setRowCount(len(default_data[0]))
-            for row in range(len(default_data[0])):
+            # self.table.setRowCount(len(default_data[0]))
+            row_count = len(ids)
+            self.table.setRowCount(row_count)
+
+            for row in range(row_count):
                 checkbox = QCheckBox()
                 self.table.setCellWidget(row, 0, checkbox)  # 设置复选框
-                self.table.setItem(row, 1, QTableWidgetItem(default_data[1][row]))  # AirWayBill
+
+                # AirWayBill
+                awb = airwaybills[row] if airwaybills[row] is not None else ""
+                self.table.setItem(row, 1, QTableWidgetItem(awb))
+
+                # created_time
+                ctime = created_times[row] if created_times[row] is not None else ""
+                self.table.setItem(row, 2, QTableWidgetItem(str(ctime)))
 
     def on_confirm(self):
         """获取所有选中的ID列数据，作为整型列表返回"""

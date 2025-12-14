@@ -2304,6 +2304,44 @@ def get_id_ioss_tracking_number_by_main_id(main_ids):
         return None
 
 
+def get_id_ioss_tracking_number_lrn_by_main_id(main_ids):
+    """
+    获取与给定 main_ids 相关的 sequence, IOSS , TrackingNumber 和 LRN。
+
+    :param main_ids: 由 main_id 组成的列表
+    :return: 返回包含三个列表：[sequence_list, ioss_list, tracking_number_list, lrn_list]
+    """
+    try:
+        # 构造占位符字符串，数量与 main_ids 列表长度相同, 查询 sequence, IOSS 和 TrackingNumber
+        query = f"""
+            SELECT sequence, IOSS, TrackingNumber, lrn
+            FROM SubExcelTable
+            WHERE main_id IN ({','.join('?' for _ in main_ids)})
+        """
+
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(query, main_ids)
+            results = cursor.fetchall()
+
+        sequence_list = [r[0] for r in results]
+        ioss_list = [r[1] for r in results]
+        tracking_number_list = [r[2] for r in results]
+        lrn_list = [r[3] for r in results]
+
+        logging.info(f"成功获取 {len(results)} 条数据，main_ids: {main_ids}")
+
+        # 返回打包的列表
+        return [sequence_list, ioss_list, tracking_number_list, lrn_list]
+    except sqlite3.Error as e:
+        # 捕获数据库相关错误
+        logging.error(f"数据库错误: {e}")
+        return None
+    except Exception as e:
+        # 捕获其他未知错误
+        logging.error(f"发生未知错误: {e}")
+        return None
+
+
 # 发送zc415的时候同步MainExcelTable，SubExcelTable和SubExcelData三个数据表的数据到服务器
 def fetch_data_of_send_zc415(main_id, username):
     """
@@ -3105,6 +3143,52 @@ def get_cr_xml_data_by_main_id(main_id, username=None):
         # 获取查询结果
         xml_data = cursor.fetchall()
         print(f"成功获取 main_table_id 为 {main_id} 的 CR='1' 的 XML 数据。")
+
+    except sqlite3.DatabaseError as e:
+        logging.error(f"数据库错误: {e}，main_table_id: {main_id}，用户名: {username}")
+        print(f"数据库错误: {e}")
+    except Exception as e:
+        logging.error(f"未知错误: {e}，main_table_id: {main_id}，用户名: {username}")
+        print(f"未知错误: {e}")
+    finally:
+        # 关闭数据库连接
+        if conn:
+            conn.close()
+
+    # 返回查询到的 XML 数据
+    return xml_data
+
+
+def get_odrzucenieKomunikatu_xml_data_by_main_id(main_id, username=None):
+    """
+    :param main_id: 主表 ID
+    :param username: 用户名（可选）
+    :return: 查询结果列表
+    """
+    conn = None
+    xml_data = []
+    try:
+        # 连接到数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # 查询符合条件的数据
+        if username:
+            cursor.execute("""
+                SELECT * FROM SubXMLData 
+                WHERE main_table_id = ? AND deleted_at IS NULL AND username = ? AND type = 'OdrzucenieKomunikatu'
+                ORDER BY event_time ASC
+            """, (main_id, username))
+        else:
+            cursor.execute("""
+                SELECT * FROM SubXMLData 
+                WHERE main_table_id = ? AND deleted_at IS NULL AND type = 'OdrzucenieKomunikatu'
+                ORDER BY event_time ASC
+            """, (main_id,))
+
+        # 获取查询结果
+        xml_data = cursor.fetchall()
+        print(f"成功获取 main_table_id 为 {main_id} 的 type='OdrzucenieKomunikatu' 的 XML 数据。")
 
     except sqlite3.DatabaseError as e:
         logging.error(f"数据库错误: {e}，main_table_id: {main_id}，用户名: {username}")

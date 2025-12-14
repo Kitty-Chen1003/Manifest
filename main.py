@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.current_sub_df = None
         self.username = None
         self.token = None
 
@@ -338,6 +339,7 @@ class MainWindow(QMainWindow):
         if column_count > 0:  # 确保至少有一个列
             row_sequence_number = self.df_main_data_list[row][1]
             datas_cr = db.get_cr_xml_data_by_main_id(row_sequence_number, self.username)
+            datas_ord = db.get_odrzucenieKomunikatu_xml_data_by_main_id(row_sequence_number, self.username)
             # print(response_data_main_id)
             self.df_response = pd.DataFrame({
                 'ID': pd.Series(dtype='str'),
@@ -348,29 +350,33 @@ class MainWindow(QMainWindow):
             })
             # 遍历列表中的元组
             self.detail_response_data = []
-            for data in datas_cr:
-                # 提取元组中的所需元素
-                response_data_id = data[0]
-                type_value = data[3]  # 元组中的第3个元素
-                replay_time = data[5]  # 元组中的第5个元素
-                direction = data[6]
-                message_id = data[10]
+            def process_response_datas(datas):
+                for data in datas:
+                    # 提取元组中的所需元素
+                    response_data_id = data[0]
+                    type_value = data[3]  # 元组中的第3个元素
+                    replay_time = data[5]  # 元组中的第5个元素
+                    direction = data[6]
+                    message_id = data[10]
 
-                # 创建一个新的DataFrame用于存储当前行
-                new_row = pd.DataFrame({
-                    'ID': [response_data_id],
-                    'type': [type_value],
-                    'message_id': [message_id],
-                    'event time': [replay_time],
-                    'direction': [direction]
-                })
+                    # 创建一个新的DataFrame用于存储当前行
+                    new_row = pd.DataFrame({
+                        'ID': [response_data_id],
+                        'type': [type_value],
+                        'message_id': [message_id],
+                        'event time': [replay_time],
+                        'direction': [direction]
+                    })
 
-                # 使用pd.concat来合并DataFrame
-                self.df_response = pd.concat([self.df_response, new_row], ignore_index=True)
+                    # 使用pd.concat来合并DataFrame
+                    self.df_response = pd.concat([self.df_response, new_row], ignore_index=True)
 
-                # 将第1和第4个元素以列表的形式存入self.detail_response_data
-                self.detail_response_data.append(
-                    [data[0], data[4], data[1], data[10], data[6], data[2], data[3]])  # data[0]是第1个元素，data[3]是第4个元素
+                    # 将第1和第4个元素以列表的形式存入self.detail_response_data
+                    self.detail_response_data.append(
+                        [data[0], data[4], data[1], data[10], data[6], data[2], data[3]])  # data[0]是第1个元素，data[3]是第4个元素
+
+            process_response_datas(datas_cr)
+            process_response_datas(datas_ord)
             self.update_response_table()
 
 
@@ -406,7 +412,7 @@ class MainWindow(QMainWindow):
         # print(column_count)
         # 直接获取第二个单元格的数据（列索引为 0）
         if column_count > 0:  # 确保至少有一个列
-            row_sequence_number = self.df_sub_data_list[row][2]
+            row_sequence_number = self.current_sub_df.iloc[row]['sub_id']
             response_data_sub_id = db.get_sub_xml_data_by_sub_table_id(row_sequence_number, self.username)
             # print(response_data_main_id)
             self.df_response = pd.DataFrame({
@@ -451,6 +457,8 @@ class MainWindow(QMainWindow):
         related_id = self.detail_response_data[row][5]
         type_value = self.detail_response_data[row][6]
         self.display_pdf(xml_data, message_id, direction, related_id, type_value)
+        if type_value == "OdrzucenieKomunikatu":
+            self.show_sub_table(self.main_table.currentRow(), related_id)
 
     def upd_table_single_click(self):
         row = self.upd_table.currentRow()
@@ -594,6 +602,8 @@ class MainWindow(QMainWindow):
     def update_sub_table(self, df=None):
         if df is None:
             df = self.df_sub
+
+        self.current_sub_df = df if df is not None else self.df_sub
 
         self.sub_table.setRowCount(len(df))
         self.sub_table.setColumnCount(len(df.columns))
@@ -830,7 +840,7 @@ class MainWindow(QMainWindow):
         self.sub_table_container.hide()
         self.main_table.show()
 
-    def show_sub_table(self, row):
+    def show_sub_table(self, row, target_sub_id = None):
         self.flag = 1
         self.df_response = pd.DataFrame({
             'ID': pd.Series(dtype='str'),
@@ -842,6 +852,7 @@ class MainWindow(QMainWindow):
         self.update_response_table()
 
         self.df_sub = pd.DataFrame({
+            'sub_id': pd.Series(dtype='str'),
             'IOSS': pd.Series(dtype='str'),
             'TrackingNumber': pd.Series(dtype='str'),
             'lrn': pd.Series(dtype='str'),
@@ -863,9 +874,11 @@ class MainWindow(QMainWindow):
             IOSS = data[7]
             TrackingNumber = data[8]
             lrn = data[9]
+            sub_id = data[2]
 
             # 追加新行到 df_main
             self.df_sub = pd.concat([self.df_sub, pd.DataFrame({
+                'sub_id': [sub_id],
                 'IOSS': [IOSS],
                 'TrackingNumber': [TrackingNumber],
                 'lrn': [lrn],
@@ -881,6 +894,14 @@ class MainWindow(QMainWindow):
         # self.sub_table.show()
         self.sub_table_container.show()
         self.toolbar_return_action.setEnabled(True)
+
+        if target_sub_id is not None:
+            for i, data in enumerate(self.df_sub_data_list):
+                # 这里 data[0] 是 sub_id
+                if str(data[2]) == str(target_sub_id):
+                    self.sub_table.selectRow(i)
+                    self.sub_table.scrollToItem(self.sub_table.item(i, 0))
+                    break
 
     def create_toolbar(self):
         toolbar = QToolBar("ToolBar", self)

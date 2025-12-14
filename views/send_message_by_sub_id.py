@@ -2,7 +2,7 @@ import pandas as pd
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QPushButton, QLabel, QCheckBox,
-    QAbstractItemView, QMessageBox, QHeaderView
+    QAbstractItemView, QMessageBox, QHeaderView, QWidget, QLineEdit
 )
 from PyQt5.QtCore import Qt
 
@@ -27,6 +27,7 @@ class SendMessageBySubID(QDialog):
 
         self.data = None
         self.df = None
+        self.current_df = None
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -44,9 +45,26 @@ class SendMessageBySubID(QDialog):
         select_layout.addWidget(self.deselect_all_checkbox)
         main_layout.addLayout(select_layout)
 
+        self.search_widget = QWidget()
+        self.search_layout = QHBoxLayout(self.search_widget)
+        self.search_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.search_input = QLineEdit()
+        self.search_input.setFixedWidth(260)  # 设置固定宽度
+
+        self.search_button = QPushButton("Search")
+        self.search_layout.addWidget(self.search_input)
+        self.search_layout.addWidget(self.search_button)
+        self.search_layout.addStretch()  # 右侧留空
+
+        main_layout.addWidget(self.search_widget)
+
+        # 搜索功能连接
+        self.search_button.clicked.connect(self.search_table)
+
         # 表格
-        self.table = QTableWidget(0, 3)  # 10行4列的表格
-        self.table.setHorizontalHeaderLabels(["Select", "IOSS", "TrackingNumber"])
+        self.table = QTableWidget(0, 4)  # 10行4列的表格
+        self.table.setHorizontalHeaderLabels(["Select", "IOSS", "TrackingNumber", "lrn"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
@@ -55,14 +73,17 @@ class SendMessageBySubID(QDialog):
         self.create_data()
 
         # 动态调整表格行数
-        row_count = len(self.data[0])
-        self.table.setRowCount(row_count)
-        # 填充表格
-        for row in range(self.df.shape[0]):
-            checkbox = QCheckBox()
-            self.table.setCellWidget(row, 0, checkbox)
-            self.table.setItem(row, 1, QTableWidgetItem(self.df.iloc[row]['IOSS']))
-            self.table.setItem(row, 2, QTableWidgetItem(self.df.iloc[row]['TrackingNumber']))
+        # row_count = len(self.data[0])
+        # self.table.setRowCount(row_count)
+        # # 填充表格
+        # for row in range(self.df.shape[0]):
+        #     checkbox = QCheckBox()
+        #     self.table.setCellWidget(row, 0, checkbox)
+        #     self.table.setItem(row, 1, QTableWidgetItem(self.df.iloc[row]['IOSS']))
+        #     self.table.setItem(row, 2, QTableWidgetItem(self.df.iloc[row]['TrackingNumber']))
+        #     self.table.setItem(row, 3, QTableWidgetItem(self.df.iloc[row]['lrn']))
+
+        self.load_table(self.df)
 
         main_layout.addWidget(self.table)
 
@@ -89,10 +110,12 @@ class SendMessageBySubID(QDialog):
         self.deselect_all_checkbox.stateChanged.connect(self.deselect_all)
 
     def create_data(self):
-        self.data = db.get_id_ioss_tracking_number_by_main_id(self.selected_ids)
+        self.data = db.get_id_ioss_tracking_number_lrn_by_main_id(self.selected_ids)
         self.df = pd.DataFrame({
+            "sub_id": self.data[0],
             "IOSS": self.data[1],  # 示例数据
-            "TrackingNumber": self.data[2]  # 示例数据
+            "TrackingNumber": self.data[2],  # 示例数据
+            "lrn": self.data[3]
         })
 
     def on_confirm(self):
@@ -102,7 +125,8 @@ class SendMessageBySubID(QDialog):
         for row in range(self.table.rowCount()):
             checkbox = self.table.cellWidget(row, 0)
             if checkbox and checkbox.isChecked():
-                selected_ids.append(self.data[0][row])
+                # selected_ids.append(self.data[0][row])
+                selected_ids.append(self.current_df.iloc[row]["sub_id"])
 
         if len(selected_ids) == 0:
             QMessageBox.warning(self, "Warning", 'Please select at least one.')
@@ -161,3 +185,32 @@ class SendMessageBySubID(QDialog):
                 checkbox = self.table.cellWidget(row, 0)
                 if checkbox:
                     checkbox.setChecked(False)
+
+    def load_table(self, df):
+
+        self.current_df = df.copy()
+
+        self.table.setRowCount(len(df))
+
+        for row in range(len(df)):
+            checkbox = QCheckBox()
+            self.table.setCellWidget(row, 0, checkbox)
+            self.table.setItem(row, 1, QTableWidgetItem(df.iloc[row]['IOSS']))
+            self.table.setItem(row, 2, QTableWidgetItem(df.iloc[row]['TrackingNumber']))
+            self.table.setItem(row, 3, QTableWidgetItem(df.iloc[row]['lrn']))
+
+    def search_table(self):
+        keyword = self.search_input.text().strip()
+        if not keyword:
+            # 显示所有数据
+            self.load_table(self.df)
+            return
+
+        # 按任意列模糊查询
+        mask = self.df.apply(
+            lambda row: row.astype(str).str.contains(keyword, case=False).any(),
+            axis=1
+        )
+        filtered_df = self.df[mask].reset_index(drop=True)
+
+        self.load_table(filtered_df)
