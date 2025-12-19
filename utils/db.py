@@ -3921,3 +3921,29 @@ def get_tracking_numbers_by_sub_ids(username, sub_ids):
     finally:
         if conn:
             conn.close()
+
+def query_zc428_mrn_by_lrn(lrn):
+    conn = None
+    try:
+        # 连接数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        sql = """
+            SELECT xml_json_data
+            FROM SubXMLData
+            WHERE type = 'zc428'
+             AND xml_json_data LIKE ?
+            LIMIT 1
+        """
+        like_param = f"%{lrn}%"
+        cursor.execute(sql, (like_param,))
+        row = cursor.fetchone()
+
+        return row
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    finally:
+        if conn:
+            conn.close()

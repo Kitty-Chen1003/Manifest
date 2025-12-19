@@ -283,6 +283,9 @@ class MainWindow(QMainWindow):
         # 单击事件处理
         self.sub_table.clicked.connect(self.sub_table_single_click)
 
+        self.sub_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.sub_table.customContextMenuRequested.connect(self.sub_table_context_menu)
+
         # 设置列宽自动调整
         self.upd_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.upd_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -387,6 +390,13 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self.refresh_upd_for_selected_row)
         menu.exec_(self.main_table.viewport().mapToGlobal(pos))
 
+    def sub_table_context_menu(self, pos):
+        menu = QMenu(self.sub_table)
+        get_mrn_action = QAction("query zc428-mrn", self)
+        menu.addAction(get_mrn_action)
+        get_mrn_action.triggered.connect(self.query_zc428_mrn_for_selected_row)
+        menu.exec_(self.sub_table.viewport().mapToGlobal(pos))
+
     def refresh_upd_for_selected_row(self):
         row = self.main_table.currentRow()
         if row >= 0:
@@ -394,6 +404,61 @@ class MainWindow(QMainWindow):
             current_upd_type = self.upd_type_filter.currentText()
             if current_upd_type in ["zc460", "zc429"]:
                 self.update_upd_table(main_id=main_id)
+
+    def query_zc428_mrn_for_selected_row(self):
+        row = self.sub_table.currentRow()
+        if row >= 0:
+            lrn_number = self.current_sub_df.iloc[row]['lrn']
+            if not lrn_number:
+                QMessageBox.warning(
+                    self,
+                    "Warning",
+                    "No valid LRN number found in the selected row."
+                )
+                return
+            self.query_zc428_mrn_by_lrn(lrn_number)
+
+    def query_zc428_mrn_by_lrn(self, lrn):
+        row = db.query_zc428_mrn_by_lrn(lrn)
+        if not row:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                f"No zc428 data found for LRN {lrn}."
+            )
+            return
+
+        xml_json_data = row[0]
+
+        try:
+            data = json.loads(xml_json_data)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to parse JSON data: {e}"
+            )
+            return
+
+        hub = data.get("p:ZC428HUB", {})
+        declarations = hub.get("Declaration", [])
+
+        for decl in declarations:
+            current_lrn = decl.get("lrn", {}).get("value")
+            if current_lrn == lrn:
+                mrn = decl.get("mrn", {}).get("value", "")
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Query Result")
+                msg.setText(f"LRN: {lrn}\nMRN: {mrn}")
+                msg.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                msg.exec_()
+                return
+
+        QMessageBox.information(
+            self,
+            "Result",
+            f"No MRN corresponding to LRN {lrn} was found in zc428."
+        )
 
     # sub_table单击事件，显示response_table
     def sub_table_single_click(self):
