@@ -1,6 +1,9 @@
 import csv
 import os
 import sys
+from datetime import datetime
+
+import pytz
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QFileDialog, QTextEdit, QMessageBox
@@ -101,6 +104,23 @@ class DictionarySelectorDialog(QDialog):
             return
 
     def xml_to_json(self, file_path, dict_name):
+
+        def is_currently_valid(validFrom, validTo, today):
+
+            # 没有任何有效期限制 → 永久有效
+            if not validFrom and not validTo:
+                return True
+
+            # [validFrom , +∞)
+            if validFrom and not validTo:
+                return today >= validFrom
+
+            # [validFrom , validTo]
+            if validFrom and validTo:
+                return validFrom <= today <= validTo
+
+            return False
+
         # 使用选项框中的字典名称作为文件名，例如 'CL042AIS'
         file_prefix = dict_name  # 从外部传入的字典名
 
@@ -108,16 +128,66 @@ class DictionarySelectorDialog(QDialog):
         tree = ET.parse(file_path)
         root = tree.getroot()
 
+        # 当前波兰日期
+        poland_tz = pytz.timezone("Europe/Warsaw")
+        today = datetime.now(poland_tz).date()
+
         if dict_name == '611':  # 新增对 '611' 字典的处理
             namespace = {'ns': 'http://www.mf.gov.pl/schematy/PDR/refdata/611.xsd'}
             node = 'ns:C611'
 
             # 提取 goodsNomenId 的前 6 位
-            goods_nomen_ids = []
+            # goods_nomen_ids = []
+            # for c611 in root.findall(node, namespace):
+            # goodsNomenId = c611.attrib.get('goodsNomenId', '')
+            # if goodsNomenId:
+            #     goods_nomen_ids.append(goodsNomenId[:6])  # 取前 6 位
+
+            goods_by_hs6 = {}
+
             for c611 in root.findall(node, namespace):
-                goodsNomenId = c611.attrib.get('goodsNomenId', '')
-                if goodsNomenId:
-                    goods_nomen_ids.append(goodsNomenId[:6])  # 取前 6 位
+
+                goodsNomenId = c611.attrib.get('goodsNomenId')
+                if not goodsNomenId:
+                    continue
+
+                hs6 = goodsNomenId[:6]
+
+                if hs6 not in goods_by_hs6:
+                    goods_by_hs6[hs6] = []
+
+                goods_by_hs6[hs6].append(c611)
+
+            goods_nomen_ids = []
+
+            for hs6, records in goods_by_hs6.items():
+
+                has_valid = False
+
+                for c611 in records:
+
+                    validFrom_str = c611.attrib.get('validFrom')
+                    validTo_str = c611.attrib.get('validTo')
+
+                    validFrom = (
+                        datetime.strptime(validFrom_str, "%Y-%m-%d").date()
+                        if validFrom_str else None
+                    )
+                    validTo = (
+                        datetime.strptime(validTo_str, "%Y-%m-%d").date()
+                        if validTo_str else None
+                    )
+
+                    # 只要有一条当前有效
+                    if is_currently_valid(validFrom, validTo, today):
+                        has_valid = True
+                        break
+
+                # 如果全部无效 → 加入 negative list
+                if not has_valid:
+                    goods_nomen_ids.append(hs6)
+
+            goods_nomen_ids = sorted(goods_nomen_ids)
 
             # 将提取的 goodsNomenIds 保存到 CSV 文件，逗号分隔
             output_csv_path = f'config/hs_negative.csv'
@@ -139,7 +209,48 @@ class DictionarySelectorDialog(QDialog):
             node = 'ns:S034'
         elif dict_name == 'CL141AIS' or dict_name == 'CL244AIS':
             node = f'ns:CCL{file_prefix[2:5]}AIS'
+
+        records_by_id = {}
         for scl in root.findall(node, namespace):
+
+            record_id = scl.get('id') or scl.get('code')
+
+            if not record_id:
+                continue
+
+            if record_id not in records_by_id:
+                records_by_id[record_id] = []
+
+            records_by_id[record_id].append(scl)
+
+        for record_id, records in records_by_id.items():
+
+            chosen = None
+
+            for scl in records:
+
+                validFrom_str = scl.get('validFrom')
+                validTo_str = scl.get('validTo')
+
+                validFrom = (
+                    datetime.strptime(validFrom_str, "%Y-%m-%d").date()
+                    if validFrom_str else None
+                )
+
+                validTo = (
+                    datetime.strptime(validTo_str, "%Y-%m-%d").date()
+                    if validTo_str else None
+                )
+
+                if is_currently_valid(validFrom, validTo, today):
+                    chosen = scl
+                    break
+
+            if not chosen:
+                continue
+
+            scl = chosen
+
             if dict_name == 'CL141AIS':
                 referenceNumber = scl.get('referenceNumber')
                 id = scl.get('id')
