@@ -191,7 +191,7 @@ def change_rabbitmq_settings(token, data):
         return None
 
 
-def synchronize_data(token, username):
+def synchronize_data(token, username, start_time=None, end_time=None):
     try:
         # 获取当前用户的 active_main_id 列表
         active_main_id = db.get_active_main_id(username)
@@ -201,6 +201,10 @@ def synchronize_data(token, username):
             'username': username,
             'active_main_ids': active_main_id
         }
+
+        if start_time and end_time:
+            data['starttime'] = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            data['endtime'] = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
         # 设置请求头，包含 JWT token
         headers = {'Authorization': f'Bearer {token}'}

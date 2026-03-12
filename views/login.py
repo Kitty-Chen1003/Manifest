@@ -1,6 +1,9 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QMessageBox
-import sys
+from datetime import datetime, timedelta
+
+import pytz
+from PyQt5.QtCore import Qt, QDateTime, QTimeZone
+from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, \
+    QMessageBox, QCheckBox, QDateTimeEdit
 
 from communication import http_client
 
@@ -39,6 +42,74 @@ class LoginDialog(QDialog):
         self.admin_button = QPushButton("Open Admin Interface")
         self.admin_button.clicked.connect(self.open_admin_interface)  # 连接打开管理员界面的方法
 
+        # ===============================
+        # 同步时间范围选择
+        # ===============================
+        self.limit_sync_checkbox = QCheckBox("Limit Synchronize Time Range")
+
+        # 波兰时区
+        poland_tz = pytz.timezone("Europe/Warsaw")
+
+        # 当前波兰时间
+        now_poland = datetime.now(poland_tz)
+
+        # 7天前
+        start_poland = now_poland - timedelta(days=7)
+
+        # 转成 Qt QDateTime（只用于显示）
+        qt_start = QDateTime(
+            start_poland.year,
+            start_poland.month,
+            start_poland.day,
+            start_poland.hour,
+            start_poland.minute,
+            start_poland.second
+        )
+
+        qt_end = QDateTime(
+            now_poland.year,
+            now_poland.month,
+            now_poland.day,
+            now_poland.hour,
+            now_poland.minute,
+            now_poland.second
+        )
+
+        self.start_datetime = QDateTimeEdit()
+        self.start_datetime.setCalendarPopup(True)
+        self.start_datetime.setDateTime(qt_start)
+
+        self.end_datetime = QDateTimeEdit()
+        self.end_datetime.setCalendarPopup(True)
+        self.end_datetime.setDateTime(qt_end)
+
+        # 默认禁用
+        self.start_datetime.setEnabled(False)
+        self.end_datetime.setEnabled(False)
+
+        # 勾选后启用
+        self.limit_sync_checkbox.stateChanged.connect(
+            lambda state: (
+                self.start_datetime.setEnabled(state),
+                self.end_datetime.setEnabled(state)
+            )
+        )
+
+        # 时间布局
+        time_layout = QVBoxLayout()
+        time_layout.addWidget(self.limit_sync_checkbox)
+
+        start_layout = QHBoxLayout()
+        start_layout.addWidget(QLabel("Start Time:"))
+        start_layout.addWidget(self.start_datetime)
+
+        end_layout = QHBoxLayout()
+        end_layout.addWidget(QLabel("End Time:"))
+        end_layout.addWidget(self.end_datetime)
+
+        time_layout.addLayout(start_layout)
+        time_layout.addLayout(end_layout)
+
         # 布局设置
         top_layout = QHBoxLayout()
         top_layout.addWidget(self.username_label)
@@ -57,12 +128,17 @@ class LoginDialog(QDialog):
         layout.addLayout(top_layout)
         layout.addLayout(password_layout)
         layout.addLayout(login_layout)
+        layout.addLayout(time_layout)
         layout.addWidget(self.admin_button)
 
         self.setLayout(layout)
 
         self.username = None
         self.token = None
+
+        self.sync_start = None
+        self.sync_end = None
+        self.sync_limit_enabled = False
 
     def check_login(self):
         # 获取输入的用户名和密码
@@ -77,6 +153,19 @@ class LoginDialog(QDialog):
             self.token = token
             # 弹出登录成功的提示框
             QMessageBox.information(self, "Login Successful", "You have successfully logged in!")
+
+            # ===============================
+            # 记录同步时间范围
+            # ===============================
+            self.sync_limit_enabled = self.limit_sync_checkbox.isChecked()
+
+            if self.sync_limit_enabled:
+                self.sync_start = self.start_datetime.dateTime().toPyDateTime()
+                self.sync_end = self.end_datetime.dateTime().toPyDateTime()
+            else:
+                self.sync_start = None
+                self.sync_end = None
+
             self.accept()  # 关闭对话框，表示登录成功
         else:
             # 弹出登录失败的提示框

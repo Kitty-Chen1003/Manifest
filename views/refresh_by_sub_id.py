@@ -1,10 +1,13 @@
+from datetime import datetime, timedelta
+
 import pandas as pd
+import pytz
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QPushButton, QLabel, QCheckBox,
-    QAbstractItemView, QMessageBox, QHeaderView
+    QAbstractItemView, QMessageBox, QHeaderView, QDateTimeEdit
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDateTime
 
 from utils import db
 
@@ -32,6 +35,75 @@ class RefreshBySubId(QDialog):
         # 显示选择的选项
         option_label = QLabel(f"Currently selected option: {self.selected_option}")
         main_layout.addWidget(option_label)
+
+        # ===============================
+        # 刷新时间范围选择
+        # ===============================
+        self.limit_refresh_checkbox = QCheckBox("Limit Refresh Time Range")
+
+        # 波兰时区
+        poland_tz = pytz.timezone("Europe/Warsaw")
+
+        # 当前波兰时间
+        now_poland = datetime.now(poland_tz)
+
+        # 7天前
+        start_poland = now_poland - timedelta(days=7)
+
+        qt_start = QDateTime(
+            start_poland.year,
+            start_poland.month,
+            start_poland.day,
+            start_poland.hour,
+            start_poland.minute,
+            start_poland.second
+        )
+
+        qt_end = QDateTime(
+            now_poland.year,
+            now_poland.month,
+            now_poland.day,
+            now_poland.hour,
+            now_poland.minute,
+            now_poland.second
+        )
+
+        self.start_datetime = QDateTimeEdit()
+        self.start_datetime.setCalendarPopup(True)
+        self.start_datetime.setDateTime(qt_start)
+
+        self.end_datetime = QDateTimeEdit()
+        self.end_datetime.setCalendarPopup(True)
+        self.end_datetime.setDateTime(qt_end)
+
+        # 默认禁用
+        self.start_datetime.setEnabled(False)
+        self.end_datetime.setEnabled(False)
+
+        # 勾选后启用
+        self.limit_refresh_checkbox.stateChanged.connect(
+            lambda state: (
+                self.start_datetime.setEnabled(state),
+                self.end_datetime.setEnabled(state)
+            )
+        )
+
+        # 时间布局
+        time_layout = QVBoxLayout()
+        time_layout.addWidget(self.limit_refresh_checkbox)
+
+        start_layout = QHBoxLayout()
+        start_layout.addWidget(QLabel("Start Time:"))
+        start_layout.addWidget(self.start_datetime)
+
+        end_layout = QHBoxLayout()
+        end_layout.addWidget(QLabel("End Time:"))
+        end_layout.addWidget(self.end_datetime)
+
+        time_layout.addLayout(start_layout)
+        time_layout.addLayout(end_layout)
+
+        main_layout.addLayout(time_layout)
 
         # 添加全选和全不选按钮的水平布局
         select_layout = QHBoxLayout()
@@ -113,6 +185,13 @@ class RefreshBySubId(QDialog):
                 'username': self.username,
                 'sub_id_list': selected_ids
             }
+
+            if self.limit_refresh_checkbox.isChecked():
+                start_time = self.start_datetime.dateTime().toPyDateTime()
+                end_time = self.end_datetime.dateTime().toPyDateTime()
+
+                data['starttime'] = start_time.strftime("%Y-%m-%d %H:%M:%S")
+                data['endtime'] = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
             response_status_code = http_client.check_status(self.token, data)
 

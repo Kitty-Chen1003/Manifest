@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, \
     QHeaderView, QAbstractItemView, QMessageBox, QDialog, QAction, QToolBar, QHBoxLayout, QLabel, \
-    QScrollArea, QComboBox, QLineEdit, QPushButton, QMenu
+    QScrollArea, QComboBox, QLineEdit, QPushButton, QMenu, QFileDialog
 from PyQt5.QtCore import Qt
 import pandas as pd
 
@@ -1434,7 +1434,10 @@ class MainWindow(QMainWindow):
             self.token = login_dialog.token
             self.exit_login.setText('Exit ' + self.username)
             if self.token:
-                success, msg = http_client.synchronize_data(self.token, self.username)
+                if login_dialog.sync_start and login_dialog.sync_end:
+                    success, msg = http_client.synchronize_data(self.token, self.username, login_dialog.sync_start, login_dialog.sync_end)
+                else:
+                    success, msg = http_client.synchronize_data(self.token, self.username)
                 if success:
                     QMessageBox.information(self, "Success", msg)
                 else:
