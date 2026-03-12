@@ -1,5 +1,8 @@
 name: Build Python EXE
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # 在以下事件时触发工作流
 on:
   push:
