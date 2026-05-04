@@ -18,6 +18,7 @@ from openpyxl.workbook import Workbook
 
 from utils import pdf, db
 from utils.common import normalize
+from utils.field_validation import validate_dataframe, handle_pl_postcode, export_error_excel, truncate_min_length_field
 
 from views.create_sads import CreateSADs
 from views.sad import SADWindow
@@ -913,7 +914,7 @@ class MainWindow(QMainWindow):
         self.sub_table_container.hide()
         self.main_table.show()
 
-    def show_sub_table(self, row, target_sub_id = None):
+    def show_sub_table(self, row, target_sub_id=None):
         self.flag = 1
         self.df_response = pd.DataFrame({
             'ID': pd.Series(dtype='str'),
@@ -1189,6 +1190,36 @@ class MainWindow(QMainWindow):
                     # 将 nan 值替换为空字符串
                     input_file.fillna('', inplace=True)
                     input_file = input_file.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+
+                    handle_pl_postcode(input_file)
+                    truncate_min_length_field(input_file, "CountryOriginCode", 2)
+                    truncate_min_length_field(input_file, "InvoiceCurrency", 3)
+                    truncate_min_length_field(input_file, "ConsignorCountry", 2)
+                    truncate_min_length_field(input_file, "ConsigneeCountryCode", 2)
+                    truncate_min_length_field(input_file, "INCOTerm", 3)
+
+                    errors = validate_dataframe(input_file)
+
+                    if errors:
+                        if "AirWayBill" in input_file.columns and not input_file["AirWayBill"].isnull().all():
+                            airwaybill = str(input_file["AirWayBill"].dropna().iloc[0])
+                        else:
+                            airwaybill = "Unknown"
+
+                        default_dir = os.path.dirname(file_path)
+                        default_name = f"Warning-{airwaybill}.xlsx"
+                        default_path = os.path.join(default_dir, default_name)
+
+                        path, _ = QFileDialog.getSaveFileName(
+                            self,
+                            "Save Error Excel",
+                            default_path,
+                            "Excel Files (*.xlsx)"
+                        )
+                        if path:
+                            export_error_excel(file_path, input_file, path)
+
+                        self.show_error("\n".join(errors))
 
                     # === 第一步：对 input_file 扫描 TrackingNumber 的首次出现行号 ===
                     tracking_index_map = {}
