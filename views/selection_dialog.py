@@ -113,6 +113,7 @@ class SelectionDialog(QDialog):
                 item_text = str(row[col + 1]) if pd.notna(row[col + 1]) else ''
                 item = QTableWidgetItem(item_text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                item.setToolTip(item_text)
                 table_widget.setItem(row.Index, col, item)
 
         table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)

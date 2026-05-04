@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QDialog, QPushButton, QLabel, QFileDialog, QDialogButtonBox, QFormLayout, \
-    QLineEdit, QWidget, QVBoxLayout, QScrollArea
+    QLineEdit, QWidget, QVBoxLayout, QScrollArea, QHBoxLayout, QSizePolicy
 from PyQt5.QtCore import Qt
 from views.input_sad_information import InputSADInformationDialog
 
@@ -159,70 +159,56 @@ class CreateSADs(QDialog):
 
     def initUI(self):
         self.setWindowTitle('Resizable Scrollable Dialog')
-        self.resize(1000, 800)
-        # 设置对话框的初始大小
-        self.setMinimumSize(300, 300)  # 设置最小大小，防止过小
-        self.setMaximumSize(1000, 800)
+        self.setMinimumSize(500, 400)
+        main_layout = QVBoxLayout(self)
 
         # 创建QScrollArea，用来显示超出部分
-        scroll_area = QScrollArea(self)
+        scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)  # 内容会根据对话框大小调整
+        main_layout.addWidget(scroll_area)
 
-        # 创建一个QWidget来承载大的控件（模拟500x500的控件）
-        content_widget = QWidget(scroll_area)
-        content_layout = QVBoxLayout(content_widget)
-
-        # 新增容器控件，与 QDialog 大小一致
-        self.main_widget = QWidget(content_widget)
-        self.main_widget.setFixedSize(900, 800)  # 设置大小与 QDialog 一致
-
-        content_layout.addWidget(self.main_widget)
-
-        # 设置内容到滚动区域
+        # # 创建一个QWidget来承载大的控件（模拟500x500的控件）
+        content_widget = QWidget()
         scroll_area.setWidget(content_widget)
+        content_layout = QHBoxLayout(content_widget)
 
-        # 创建对话框的主布局
-        layout = QVBoxLayout(self)
-        layout.addWidget(scroll_area)
+        left_layout = QVBoxLayout()
 
         # 将所有控件添加到 main_widget 上
-        self.btn_select_folder = QPushButton('Select Excel Files', self.main_widget)
-        self.btn_select_folder.setGeometry(50, 50, 200, 40)
+        self.btn_select_folder = QPushButton('Select Excel Files')
+        self.btn_select_folder.setStyleSheet("""
+            QPushButton {
+                padding: 12px 20px 12px 20px;
+            }
+        """)
+        # self.btn_select_folder.setGeometry(50, 50, 200, 40)
         self.btn_select_folder.clicked.connect(self.select_files)
+        self.btn_select_folder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # 创建 QLabel 并放入 QScrollArea 中
-        self.label_status = QLabel('No file selected', self.main_widget)
+        self.label_status = QLabel('No file selected')
         self.label_status.setWordWrap(True)
-        self.scroll_area_label = QScrollArea(self.main_widget)
+
+        self.scroll_area_label = QScrollArea()
         self.scroll_area_label.setWidgetResizable(True)
-        self.scroll_area_label.setGeometry(50, 100, 300, 100)
+        # self.scroll_area_label.setGeometry(50, 100, 300, 100)
+        self.scroll_area_label.setMinimumHeight(100)
         self.scroll_area_label.setWidget(self.label_status)
 
-        self.btn_enter_info = QPushButton('Edit Info', self.main_widget)
-        self.btn_enter_info.setGeometry(50, 210, 200, 40)
+        self.btn_enter_info = QPushButton('Edit Info')
+        self.btn_enter_info.setStyleSheet("""
+            QPushButton {
+                padding: 12px 20px 12px 20px;
+            }
+        """)
+        # self.btn_enter_info.setGeometry(50, 210, 200, 40)
         self.btn_enter_info.setEnabled(False)
         self.btn_enter_info.clicked.connect(self.enter_info)
-
-        # 显示信息的 QLabel 和 QScrollArea
-        temp_input_information = self.output_of_input_information()
-        text = "\n".join([f"{key}: {value}" for key, value in temp_input_information.items()])
-
-        self.info_label = QLabel(text, self.main_widget)
-        self.info_label.setStyleSheet("border: 1px solid #222; border-radius: 10px; padding-left: 10px;")
-        self.info_label.setWordWrap(False)
-        self.info_label.setFixedHeight(750)
-        self.info_label.setGeometry(460, 25, 400, 750)
-
-        self.scroll_area_info = QScrollArea(self.main_widget)
-        self.scroll_area_info.setGeometry(460, 25, 400, 750)
-        self.scroll_area_info.setWidget(self.info_label)
-        self.scroll_area_info.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.scroll_area_info.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area_info.setWidgetResizable(True)
+        self.btn_enter_info.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # 表单布局部分
-        self.container_widget = QWidget(self.main_widget)
-        self.container_widget.setGeometry(50, 240, 300, 450)
+        self.container_widget = QWidget()
+        # self.container_widget.setGeometry(50, 240, 300, 450)
 
         # Create a form layout
         form_layout = QFormLayout(self.container_widget)
@@ -243,26 +229,72 @@ class CreateSADs(QDialog):
 
         for k in self.list_key:
             label = QLabel(k + ": ")
+            label.setTextInteractionFlags(
+                Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+            )
             editor = QLineEdit()
             editor.setMaximumWidth(200)
             form_layout.addRow(label, editor)
             self.list_label.append(label)
             self.list_editor.append(editor)
 
-        self.container_widget.setLayout(form_layout)
+        # self.container_widget.setLayout(form_layout)
 
         # Create a scroll area
-        self.scroll_area_form = QScrollArea(self.main_widget)
-        self.scroll_area_form.setGeometry(50, 260, 400, 450)
+        self.scroll_area_form = QScrollArea()
+        # self.scroll_area_form.setGeometry(50, 260, 400, 450)
         self.scroll_area_form.setWidgetResizable(True)
         self.scroll_area_form.setWidget(self.container_widget)
 
         # 确认和取消按钮
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self.main_widget)
-        self.buttons.setGeometry(50, 730, 300, 40)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # self.buttons.setGeometry(50, 730, 300, 40)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+
+        left_layout.addWidget(self.btn_select_folder)
+        left_layout.addWidget(self.scroll_area_label)
+        left_layout.addWidget(self.btn_enter_info)
+        left_layout.addWidget(self.scroll_area_form)
+        left_layout.addWidget(self.buttons)
+        left_layout.addStretch()
+
+        right_layout = QVBoxLayout()
+        # 显示信息的 QLabel 和 QScrollArea
+        temp_input_information = self.output_of_input_information()
+        text = "\n".join([f"{key}: {value}" for key, value in temp_input_information.items()])
+
+        self.info_label = QLabel(text)
+        self.info_label.setStyleSheet("border: 1px solid #222; border-radius: 10px; padding-left: 10px;")
+        self.info_label.setWordWrap(False)
+
+        # self.info_label.setFixedHeight(750)
+        # self.info_label.setGeometry(460, 25, 400, 750)
+        self.info_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.scroll_area_info = QScrollArea()
+        # self.scroll_area_info.setGeometry(460, 25, 400, 750)
+        self.scroll_area_info.setWidget(self.info_label)
+        self.scroll_area_info.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.scroll_area_info.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area_info.setWidgetResizable(True)
+
+        right_layout.addWidget(self.scroll_area_info)
+
+        # ================= 合并 =================
+        content_layout.setContentsMargins(30, 30, 30, 30)
+        content_layout.setSpacing(15)
+
+        left_layout.setContentsMargins(15, 15, 15, 15)
+
+        right_layout.setContentsMargins(15, 15, 15, 15)
+
+        content_layout.addLayout(left_layout, 1)
+        content_layout.addLayout(right_layout, 1)
+
+        self.showMaximized()
+
 
     # def select_folder(self):
     #     folder_dialog = QFileDialog(self)
@@ -272,6 +304,16 @@ class CreateSADs(QDialog):
     #         self.selected_folder = folder_dialog.selectedFiles()[0]
     #         self.label_status.setText(f'Selected folder: {self.selected_folder}')
     #         self.btn_enter_info.setEnabled(True)  # Enable after folder is selected
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        w = self.width()
+        font_size = max(10, min(16, int(w / 80)))
+
+        for widget in self.findChildren(QWidget):
+            font = widget.font()
+            font.setPointSize(font_size)
+            widget.setFont(font)
 
     def select_files(self):
         file_dialog = QFileDialog(self)

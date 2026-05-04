@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, \
     QHeaderView, QAbstractItemView, QMessageBox, QDialog, QAction, QToolBar, QHBoxLayout, QLabel, \
-    QScrollArea, QComboBox, QLineEdit, QPushButton, QMenu, QFileDialog
+    QScrollArea, QComboBox, QLineEdit, QPushButton, QMenu, QFileDialog, QSizePolicy
 from PyQt5.QtCore import Qt
 import pandas as pd
 
@@ -138,19 +138,21 @@ class MainWindow(QMainWindow):
         self.create_toolbar()
 
         self.top = QWidget()
-        self.top.setFixedWidth(1260)
-        self.top.setFixedHeight(400)
+        # self.top.setFixedWidth(1260)
+        # self.top.setFixedHeight(400)
 
         self.layout_top = QHBoxLayout(self.top)
 
         self.main_table = QTableWidget()
-        self.main_table.setMaximumWidth(700)
-        self.main_table.setFixedHeight(350)
+        # self.main_table.setMaximumWidth(700)
+        # self.main_table.setFixedHeight(350)
+        self.main_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.sub_table = QTableWidget()
-        self.sub_table.setMaximumWidth(700)
-        self.sub_table.setFixedHeight(350)
+        # self.sub_table.setMaximumWidth(700)
+        # self.sub_table.setFixedHeight(350)
+        self.sub_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.layout_top.addWidget(self.main_table)
+        self.layout_top.addWidget(self.main_table, 1)
         # self.layout_top.addWidget(self.sub_table)
 
         self.sub_table_container = QWidget()
@@ -161,11 +163,11 @@ class MainWindow(QMainWindow):
         self.sub_search_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sub_search_input = QLineEdit()
-        self.sub_search_input.setFixedWidth(260)  # 设置固定宽度
+        # self.sub_search_input.setMaximumWidth(260) # 设置固定宽度
 
         self.sub_search_button = QPushButton("Search")
-        self.sub_search_layout.addWidget(self.sub_search_input)
-        self.sub_search_layout.addWidget(self.sub_search_button)
+        self.sub_search_layout.addWidget(self.sub_search_input, 7)
+        self.sub_search_layout.addWidget(self.sub_search_button, 3)
         self.sub_search_layout.addStretch()  # 右侧留空
 
         self.sub_table_layout.addWidget(self.sub_search_widget)
@@ -177,7 +179,7 @@ class MainWindow(QMainWindow):
         self.sub_table_container.hide()
 
         # 把容器加入 top 布局（替代原来的 self.sub_table）
-        self.layout_top.addWidget(self.sub_table_container)
+        self.layout_top.addWidget(self.sub_table_container, 1)
 
         self.sub_search_button.clicked.connect(self.search_sub_table)
         self.sub_search_input.returnPressed.connect(self.search_sub_table)
@@ -223,19 +225,20 @@ class MainWindow(QMainWindow):
         # UPD table (original)
         # --------------------
         self.upd_table = QTableWidget()
-        self.upd_table.setMaximumWidth(560)
-        self.upd_table.setFixedHeight(350)
+        # self.upd_table.setMaximumWidth(560)
+        # self.upd_table.setFixedHeight(350)
+        self.upd_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.upd_container_layout.addWidget(self.upd_table)
-        self.layout_top.addWidget(self.upd_container)
+        self.layout_top.addWidget(self.upd_container, 1)
         # self.upd_table = QTableWidget()
         # self.upd_table.setMaximumWidth(560)
         # self.upd_table.setFixedHeight(350)
         # self.layout_top.addWidget(self.upd_table)
 
         self.response = QWidget()
-        self.response.setFixedWidth(1260)
-        self.response.setFixedHeight(400)
+        # self.response.setFixedWidth(1260)
+        # self.response.setFixedHeight(400)
         # self.response.setStyleSheet("padding: 0; border: 1px solid #222;")
         self.create_response_view()
 
@@ -299,15 +302,16 @@ class MainWindow(QMainWindow):
         self.layout_response = QHBoxLayout(self.response)
 
         self.response_table = QTableWidget()
-        self.response_table.setFixedWidth(590)
-        self.response_table.setFixedHeight(380)
+        # self.response_table.setFixedWidth(590)
+        # self.response_table.setFixedHeight(380)
+        self.response_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # 设置列宽自动调整
         self.response_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.response_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         # 设置选择模式为单选
         self.response_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.response_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.layout_response.addWidget(self.response_table)
+        self.layout_response.addWidget(self.response_table, 1)
         self.update_response_table()
 
         # 单击事件处理
@@ -323,7 +327,7 @@ class MainWindow(QMainWindow):
         self.info_layout = QVBoxLayout(self.info_widget)
 
         self.scroll_area.setWidget(self.info_widget)
-        self.layout_response.addWidget(self.scroll_area)
+        self.layout_response.addWidget(self.scroll_area, 1)
 
     def main_table_single_click(self):
         for i in reversed(range(self.info_layout.count())):
@@ -353,6 +357,7 @@ class MainWindow(QMainWindow):
             })
             # 遍历列表中的元组
             self.detail_response_data = []
+
             def process_response_datas(datas):
                 for data in datas:
                     # 提取元组中的所需元素
@@ -381,7 +386,6 @@ class MainWindow(QMainWindow):
             process_response_datas(datas_cr)
             process_response_datas(datas_ord)
             self.update_response_table()
-
 
     def main_table_context_menu(self, pos):
         menu = QMenu(self.main_table)
@@ -612,6 +616,7 @@ class MainWindow(QMainWindow):
                 item_text = str(self.df_response.iloc[row, col]) if pd.notna(self.df_response.iloc[row, col]) else ''
                 item = QTableWidgetItem(item_text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
+                item.setToolTip(item_text)
                 self.response_table.setItem(row, col, item)
 
     def update_main_table(self):
@@ -645,6 +650,7 @@ class MainWindow(QMainWindow):
                 item_text = str(self.df_main.iloc[row, col]) if pd.notna(self.df_main.iloc[row, col]) else ''
                 item = QTableWidgetItem(item_text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
+                item.setToolTip(item_text)
                 self.main_table.setItem(row, col, item)
 
     def search_sub_table(self):
@@ -688,9 +694,10 @@ class MainWindow(QMainWindow):
                 # item = QTableWidgetItem(item_text)
                 # item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
                 # self.sub_table.setItem(row, col, item)
-                val = "" if pd.isna(values[row][col]) else str(values[row][col])
-                item = QTableWidgetItem(val)
+                item_text = "" if pd.isna(values[row][col]) else str(values[row][col])
+                item = QTableWidgetItem(item_text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
+                item.setToolTip(item_text)
                 self.sub_table.setItem(row, col, item)
 
         self.sub_table.blockSignals(False)
@@ -869,9 +876,10 @@ class MainWindow(QMainWindow):
             for col in range(cols):
                 # item_text = str(self.df_upd.iloc[row, col]) if pd.notna(self.df_upd.iloc[row, col]) else ''
                 # item = QTableWidgetItem(item_text)
-                val = "" if pd.isna(values[row][col]) else str(values[row][col])
-                item = QTableWidgetItem(val)
+                item_text = "" if pd.isna(values[row][col]) else str(values[row][col])
+                item = QTableWidgetItem(item_text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 设置为只读
+                item.setToolTip(item_text)
                 self.upd_table.setItem(row, col, item)
 
         # 恢复 UI 更新
@@ -1464,5 +1472,5 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     mainWin = MainWindow()
-    mainWin.show()
+    mainWin.showMaximized()
     sys.exit(app.exec_())
