@@ -1,8 +1,9 @@
 import json
 import re
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QPushButton, QLabel, QLineEdit, QDialog, QDialogButtonBox, QVBoxLayout, QMessageBox, \
-    QScrollArea, QWidget
+    QScrollArea, QWidget, QHBoxLayout, QSizePolicy, QFormLayout, QApplication
 
 from utils.path import get_resource_path
 from views.selection_dialog import SelectionDialog
@@ -16,38 +17,77 @@ class InputSADInformationDialog(QDialog):
     def __init__(self, index, input_information, username, parent=None):
         super().__init__(parent)
         self.username = username
+        self.input_information = input_information.copy()
+        self.temp_input_information = input_information.copy()
+
+        screen = QApplication.primaryScreen()
+        dpi = screen.logicalDotsPerInch()
+
+        self.scale = dpi / 96.0
+
+        self.font_size_normal = self.s(16)
+        self.font_size_large = self.s(20)
 
         self.setWindowTitle("Input SAD Information Dialog")
-        self.resize(1000, 800)
-        self.setMaximumSize(1000, 800)
-        self.setMinimumSize(300, 300)
-
-        self.nav_button_sheetstyle = """
-            QPushButton {
+        self.resize(1200, 900)
+        self.setMinimumSize(800, 600)
+        self.showMaximized()
+        self.button_color_disabled = f"""
+            background-color: #222; 
+            border: none; 
+            color: #fff; 
+            border-radius: 10px; 
+            padding: {self.s(6)}px {self.s(10)}px; 
+            font-size: {self.font_size_normal}px;
+        """
+        self.nav_button_sheetstyle = f"""
+            QPushButton {{
                 background-color: #3393FF;  /* 设置背景颜色 */
                 color: white;               /* 设置文本颜色 */
-                border-radius: 8px;
-            }
-            QPushButton:hover {
+                border-radius: 10px;
+                padding: {self.s(6)}px {self.s(10)}px;
+                font-size: {self.font_size_large}px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
                 background-color: #2980b9;  /* 鼠标悬停时的背景颜色 */
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #3d8649;  /* 按下按钮时的背景颜色 */
-            }
+            }}
         """
 
-        self.nav_button_sheetstyle_active = """
-            QPushButton {
+        self.action_button_sheetstyle = f"""
+            QPushButton {{
+                background-color: #3393FF;  /* 设置背景颜色 */
+                color: white;               /* 设置文本颜色 */
+                border-radius: 10px;
+                padding: {self.s(6)}px {self.s(10)}px;
+                font-size: {self.font_size_normal}px;
+            }}
+            QPushButton:hover {{
+                background-color: #2980b9;  /* 鼠标悬停时的背景颜色 */
+            }}
+            QPushButton:pressed {{
+                background-color: #3d8649;  /* 按下按钮时的背景颜色 */
+            }}
+        """
+
+        self.nav_button_sheetstyle_active = f"""
+            QPushButton {{
                 background-color: #3d8649;  /* 设置背景颜色 */
                 color: white;               /* 设置文本颜色 */
-                border-radius: 8px;
-            }
-            QPushButton:hover {
+                border-radius: 10px;
+                padding: {self.s(6)}px {self.s(10)}px;
+                font-size: {self.font_size_large}px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
                 background-color: #2980b9;  /* 鼠标悬停时的背景颜色 */
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #1abc9c;  /* 按下按钮时的背景颜色 */
-            }
+            }}
         """
 
         self.keys_input_information = [
@@ -144,17 +184,13 @@ class InputSADInformationDialog(QDialog):
             'goodsitem transport document'
         ]
 
-        self.is_must_fill = [1, 1, 1,   # 0-2
+        self.is_must_fill = [1, 1, 1,  # 0-2
                              1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 3-12
-                             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,    # 13-28
-                             0, 0, 0, 0, 0, 1, 1, 0, 0,     # 29-37
-                             1, 0, 0, 0, 0, 0]      # 38-43
+                             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # 13-28
+                             0, 0, 0, 0, 0, 1, 1, 0, 0,  # 29-37
+                             1, 0, 0, 0, 0, 0]  # 38-43
 
         self.update_cache_dict = {}
-
-        self.input_information = input_information.copy()
-        self.temp_input_information = input_information.copy()
-        # self.temp_input_information = temp_input_information
 
         num_key = 44
         self.files_name = [''] * num_key
@@ -178,30 +214,48 @@ class InputSADInformationDialog(QDialog):
         for i in range(38, 44):
             self.le_read_only[i] = 1
 
-        # 创建QScrollArea，用来显示超出部分
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidgetResizable(True)  # 内容会根据对话框大小调整
+        outer_layout = QVBoxLayout(self)
 
-        # 创建一个QWidget来承载大的控件（模拟500x500的控件）
-        content_widget = QWidget(scroll_area)
-        content_layout = QVBoxLayout(content_widget)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
 
-        # 新增容器控件，与 QDialog 大小一致
-        self.main_widget = QWidget(content_widget)
-        self.main_widget.setFixedSize(900, 800)  # 设置大小与 QDialog 一致
+        container = QWidget()
 
-        content_layout.addWidget(self.main_widget)
+        outer_center_layout = QHBoxLayout(container)
+        outer_center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 设置内容到滚动区域
-        scroll_area.setWidget(content_widget)
+        self.main_widget = QWidget()
+        self.main_layout = QVBoxLayout(self.main_widget)
 
-        # 创建对话框的主布局
-        layout = QVBoxLayout(self)
-        layout.addWidget(scroll_area)
+        outer_center_layout.addStretch()
+        outer_center_layout.addWidget(self.main_widget)
+        outer_center_layout.addStretch()
 
-        # Layout for the dialog
-        main_layout = QVBoxLayout(self.main_widget)
-        self.setLayout(main_layout)
+        self.main_layout.setContentsMargins(75, 150, 75, 100)
+
+        scroll_area.setWidget(container)
+        outer_layout.addWidget(scroll_area)
+
+        nav_layout = QHBoxLayout()
+        nav_layout.setSpacing(15)
+
+        button_names = ["CustomsOffice", "Declarant", "LocationOfGoods", "GoodsShipment", "GoodsItem"]
+
+        # Create buttons with absolute positioning
+        self.buttons = []
+
+        for name in button_names:
+            btn = QPushButton(name)
+
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.setMinimumHeight(self.s(40))
+            btn.setStyleSheet(self.nav_button_sheetstyle)
+            btn.clicked.connect(self.button_clicked)
+            nav_layout.addWidget(btn)
+            self.buttons.append(btn)
+
+        self.main_layout.addLayout(nav_layout)
+        self.main_layout.setSpacing(50)
 
         # # Create menu bar
         # menu_bar = QMenuBar(self)
@@ -227,124 +281,131 @@ class InputSADInformationDialog(QDialog):
         #
         # help_menu.addAction(QAction("关于", self))
 
-        # Absolute positioning
-        button_widths = [115, 80, 120, 110, 80]
-        button_height = 30
-        input_width = 200
-        input_height = 30
-
-        x_position = 50  # 初始的X位置
-
-        button_names = ["CustomsOffice", "Declarant", "LocationOfGoods", "GoodsShipment", "GoodsItem"]
-
-        # Create buttons with absolute positioning
-        self.buttons = []
-        for i, name in enumerate(button_names):
-            button = QPushButton(name, self.main_widget)
-            button_width = button_widths[i]
-            button.setGeometry(x_position, 50, button_width, button_height)
-            # 更新下一个按钮的起始X位置
-            x_position += button_width + 10  # 按钮宽度 + 间距
-
-            button.setStyleSheet(self.nav_button_sheetstyle)
-            button.clicked.connect(self.button_clicked)
-            self.buttons.append(button)
-
         # Create a dictionary to hold different sets of widgets
         self.widget_sets = {
             0: [
-                QLabel("customs office referenceNumber(CL141)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget)
+                QLabel("customs office referenceNumber(CL141)"), QLineEdit(), QPushButton("Select")
             ],
             1: [
-                QLabel("LRN(first 9 digits only)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("additional declaration type(CL042)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant name(company)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant identification number(EORI)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant street and number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant postcode", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant city", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("declarant country(CL199)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("contact person", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("representative identification number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("representative status(CL094)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("representative contact person", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget)
+                QLabel("LRN(first 9 digits only)"), QLineEdit(), QPushButton("Select"),
+                QLabel("additional declaration type(CL042)"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant name(company)"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant identification number(EORI)"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant street and number"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant postcode"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant city"), QLineEdit(), QPushButton("Select"),
+                QLabel("declarant country(CL199)"), QLineEdit(), QPushButton("Select"),
+                QLabel("contact person"), QLineEdit(), QPushButton("Details"),
+                QLabel("representative identification number"), QLineEdit(), QPushButton("Select"),
+                QLabel("representative status(CL094)"), QLineEdit(), QPushButton("Select"),
+                QLabel("representative contact person"), QLineEdit(), QPushButton("Details")
             ],
             2: [
-                QLabel("customs office reference number(CL141)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("type of location(CL347)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("qualifier of identification(CL326)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("unLocode(CL244)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("authorisation number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("additional identifier", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("latitude", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("longitude", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("EORI Number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("address street and number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("address postcode", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("address city", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("address country(CL199)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("postcode address postcode", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("postcode address house number", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("postcode address country(CL190)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget)
+                QLabel("customs office reference number(CL141)"), QLineEdit(), QPushButton("Select"),
+                QLabel("type of location(CL347)"), QLineEdit(), QPushButton("Select"),
+                QLabel("qualifier of identification(CL326)"), QLineEdit(), QPushButton("Select"),
+                QLabel("unLocode(CL244)"), QLineEdit(), QPushButton("Select"),
+                QLabel("authorisation number"), QLineEdit(), QPushButton("Select"),
+                QLabel("additional identifier"), QLineEdit(), QPushButton("Select"),
+                QLabel("latitude"), QLineEdit(), QPushButton("Select"),
+                QLabel("longitude"), QLineEdit(), QPushButton("Select"),
+                QLabel("EORI Number"), QLineEdit(), QPushButton("Select"),
+                QLabel("address street and number"), QLineEdit(), QPushButton("Select"),
+                QLabel("address postcode"), QLineEdit(), QPushButton("Select"),
+                QLabel("address city"), QLineEdit(), QPushButton("Select"),
+                QLabel("address country(CL199)"), QLineEdit(), QPushButton("Select"),
+                QLabel("postcode address postcode"), QLineEdit(), QPushButton("Select"),
+                QLabel("postcode address house number"), QLineEdit(), QPushButton("Select"),
+                QLabel("postcode address country(CL190)"), QLineEdit(), QPushButton("Select")
             ],
             3: [
-                QLabel("referenceNumberUCR", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("previous document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("additional information", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("supporting document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("additional reference", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("transport document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("additional fiscal reference", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("transport costs to destination currency(CL352)", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget),
-                QLabel("transport costs to destination amount", self.main_widget), QLineEdit(self.main_widget), QPushButton("Select", self.main_widget)
+                QLabel("referenceNumberUCR"), QLineEdit(), QPushButton("Select"),
+                QLabel("previous document"), QLineEdit(), QPushButton("Details"),
+                QLabel("additional information"), QLineEdit(), QPushButton("Details"),
+                QLabel("supporting document"), QLineEdit(), QPushButton("Details"),
+                QLabel("additional reference"), QLineEdit(), QPushButton("Details"),
+                QLabel("transport document"), QLineEdit(), QPushButton("Details"),
+                QLabel("additional fiscal reference"), QLineEdit(), QPushButton("Details"),
+                QLabel("transport costs to destination currency(CL352)"), QLineEdit(), QPushButton("Select"),
+                QLabel("transport costs to destination amount"), QLineEdit(), QPushButton("Select")
             ],
             4: [
-                QLabel("additional procedure", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("previous document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("additional information", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("supporting document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("additional reference", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget),
-                QLabel("transport document", self.main_widget), QLineEdit(self.main_widget), QPushButton("Details", self.main_widget)
+                QLabel("additional procedure"), QLineEdit(), QPushButton("Details"),
+                QLabel("previous document"), QLineEdit(), QPushButton("Details"),
+                QLabel("additional information"), QLineEdit(), QPushButton("Details"),
+                QLabel("supporting document"), QLineEdit(), QPushButton("Details"),
+                QLabel("additional reference"), QLineEdit(), QPushButton("Details"),
+                QLabel("transport document"), QLineEdit(), QPushButton("Details")
             ]
         }
 
+        self.widget_containers = {}
         self.all_line_edits = []
         self.all_select_buttons = []
         # Set geometry for widgets and connect buttons to dialog
-        lable_width = [300, 300, 300, 300, 290]
-        button_width = 70
         QPushButton_index = 0
         for i, widgets in self.widget_sets.items():
+            form_layout = QFormLayout()
+            form_layout.setSpacing(15)
+            form_layout.setLabelAlignment(Qt.AlignLeft)
+            form_layout.setFormAlignment(Qt.AlignLeft)
+
             for j in range(0, len(widgets), 3):
                 label, line_edit, button = widgets[j], widgets[j + 1], widgets[j + 2]
-                label.setGeometry(50, 100 + j // 3 * (input_height + 10), lable_width[i], input_height)
-                # if self.le_read_only[QPushButton_index]:
-                #     line_edit.setReadOnly(True)
-                line_edit.setGeometry(50 + lable_width[i], 100 + j // 3 * (input_height + 10), input_width,
-                                      input_height)
+
                 self.all_line_edits.append(line_edit)
-                button.setGeometry(270 + lable_width[i], 100 + j // 3 * (input_height + 10), button_width, input_height)
-                self.button_color_disabled = "background-color: #222; border: none; color: #fff; border-radius: 8px;"
-                button.setStyleSheet(self.nav_button_sheetstyle)
-                if self.le_read_only[QPushButton_index]:
+
+                button.setStyleSheet(self.action_button_sheetstyle)
+
+                current_index = QPushButton_index
+                if self.le_read_only[current_index]:
                     button.clicked.connect(
-                        lambda checked, le=line_edit, index=QPushButton_index: self.show_multiple_input_dialog(le,
-                                                                                                               index))
+                        lambda checked, le=line_edit, idx=current_index:
+                        self.show_multiple_input_dialog(le, idx)
+                    )
                 else:
                     button.clicked.connect(
-                        lambda checked, le=line_edit, index=QPushButton_index: self.show_selection_dialog(le, index))
+                        lambda checked, le=line_edit, idx=current_index:
+                        self.show_selection_dialog(le, idx)
+                    )
+
                 self.all_select_buttons.append(button)
-                label.hide()
-                line_edit.hide()
-                button.hide()
+
+                row_layout = QHBoxLayout()
+                row_layout.setSpacing(10)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+
+                line_edit.setFixedHeight(self.s(32))
+                button.setFixedWidth(self.s(100))
+                button.setFixedHeight(self.s(32))
+
+                line_edit.setMinimumWidth(self.s(300))
+                line_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+                label.setStyleSheet(f"font-size: {self.font_size_normal}px;")
+                line_edit.setStyleSheet(f"font-size: {self.font_size_normal}px;")
+
+                row_layout.addWidget(line_edit)
+                row_layout.addWidget(button)
+
+                row_layout.addStretch()
+
+                form_layout.addRow(label, row_layout)
+
                 QPushButton_index += 1
+
+            wrapper = QWidget()
+            wrapper.setLayout(form_layout)
+            wrapper.hide()
+
+            self.widget_containers[i] = wrapper
+            self.main_layout.addWidget(wrapper)
 
         self.adding_constraints()
 
-        i = 0
         # for value in self.temp_input_information.values():
         # print(self.input_information)
-        for value in self.input_information.values():
+        for i, value in enumerate(self.input_information.values()):
             if isinstance(value, str):
                 self.all_line_edits[i].setText(value)
             else:
@@ -352,11 +413,11 @@ class InputSADInformationDialog(QDialog):
                     self.all_line_edits[i].setText('')
                 else:
                     result = ";".join(
-                        ",".join(str(value) for value in dictionary.values())
-                        for dictionary in value
+                        ",".join(str(v) for v in d.values())
+                        for d in value
                     )
                     self.all_line_edits[i].setText(result)
-            i += 1
+
         # for i in range(len(self.text_all_line_edits)):
         #     all_line_edits[i].setText(self.text_all_line_edits[i])
 
@@ -364,12 +425,13 @@ class InputSADInformationDialog(QDialog):
         self.update_input_fields(index)
         self.buttons[index].setStyleSheet(self.nav_button_sheetstyle_active)
 
-        dialog_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self.main_widget)
-        dialog_buttons.setGeometry(50, 750, 200, 30)
+        dialog_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # dialog_buttons.setGeometry(50, 750, 200, 30)
 
         # 连接按钮的信号到槽函数
         dialog_buttons.accepted.connect(self.on_accepted)
         dialog_buttons.rejected.connect(self.reject)
+        self.main_layout.addWidget(dialog_buttons)
 
     def adding_constraints(self):
         self.all_line_edits[11].textChanged.connect(self.representative_status_changed)
@@ -483,7 +545,7 @@ class InputSADInformationDialog(QDialog):
         self.all_line_edits[index].setReadOnly(False)
         self.all_select_buttons[index].setEnabled(True)
         # self.all_select_buttons[index].setStyleSheet(self.button_color_enabled)
-        self.all_select_buttons[index].setStyleSheet(self.nav_button_sheetstyle)
+        self.all_select_buttons[index].setStyleSheet(self.action_button_sheetstyle)
 
     def prohibit_detail(self, index):
         self.all_select_buttons[index].setEnabled(False)
@@ -492,7 +554,7 @@ class InputSADInformationDialog(QDialog):
     def restore_detail(self, index):
         self.all_select_buttons[index].setEnabled(True)
         # self.all_select_buttons[index].setStyleSheet(self.button_color_enabled)
-        self.all_select_buttons[index].setStyleSheet(self.nav_button_sheetstyle)
+        self.all_select_buttons[index].setStyleSheet(self.action_button_sheetstyle)
 
     def button_clicked(self):
         sender = self.sender()
@@ -504,20 +566,23 @@ class InputSADInformationDialog(QDialog):
 
     def update_input_fields(self, index):
         # Hide all widgets
-        for widgets in self.widget_sets.values():
-            for j in range(0, len(widgets), 3):
-                label, line_edit, button = widgets[j], widgets[j + 1], widgets[j + 2]
-                label.hide()
-                line_edit.hide()
-                button.hide()
+        # for widgets in self.widget_sets.values():
+        #     for j in range(0, len(widgets), 3):
+        #         label, line_edit, button = widgets[j], widgets[j + 1], widgets[j + 2]
+        #         label.hide()
+        #         line_edit.hide()
+        #         button.hide()
+        #
+        # # Show the widgets corresponding to the selected button
+        # for j in range(0, len(self.widget_sets[index]), 3):
+        #     label, line_edit, button = self.widget_sets[index][j], self.widget_sets[index][j + 1], \
+        #         self.widget_sets[index][j + 2]
+        #     label.show()
+        #     line_edit.show()
+        #     button.show()
 
-        # Show the widgets corresponding to the selected button
-        for j in range(0, len(self.widget_sets[index]), 3):
-            label, line_edit, button = self.widget_sets[index][j], self.widget_sets[index][j + 1], \
-                self.widget_sets[index][j + 2]
-            label.show()
-            line_edit.show()
-            button.show()
+        for i, container in self.widget_containers.items():
+            container.setVisible(i == index)
 
     def show_selection_dialog(self, line_edit, index):
         # print(index)
@@ -785,3 +850,6 @@ class InputSADInformationDialog(QDialog):
         else:
             # 如果输入不正确，可以在这里做其他处理，比如不关闭对话框
             pass
+
+    def s(self, value):
+        return int(value * self.scale)

@@ -159,7 +159,7 @@ class CreateSADs(QDialog):
 
     def initUI(self):
         self.setWindowTitle('Resizable Scrollable Dialog')
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(800, 600)
         main_layout = QVBoxLayout(self)
 
         # 创建QScrollArea，用来显示超出部分
@@ -192,7 +192,7 @@ class CreateSADs(QDialog):
         self.scroll_area_label = QScrollArea()
         self.scroll_area_label.setWidgetResizable(True)
         # self.scroll_area_label.setGeometry(50, 100, 300, 100)
-        self.scroll_area_label.setMinimumHeight(100)
+        self.scroll_area_label.setMinimumHeight(150)
         self.scroll_area_label.setWidget(self.label_status)
 
         self.btn_enter_info = QPushButton('Edit Info')
@@ -233,7 +233,8 @@ class CreateSADs(QDialog):
                 Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
             )
             editor = QLineEdit()
-            editor.setMaximumWidth(200)
+            editor.setMaximumWidth(150)
+            editor.setMaximumWidth(300)
             form_layout.addRow(label, editor)
             self.list_label.append(label)
             self.list_editor.append(editor)
