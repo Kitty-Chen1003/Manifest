@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QPushButton, QFileDialog, QTextEdit, QMessageBox
+    QLabel, QComboBox, QPushButton, QFileDialog, QTextEdit, QMessageBox, QSizePolicy
 )
 from PyQt5.QtCore import Qt
 import xml.etree.ElementTree as ET
@@ -47,6 +47,15 @@ class DictionarySelectorDialog(QDialog):
         self.file_path_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         self.file_button = QPushButton("Select File")
+        self.file_button.setSizePolicy(
+            QSizePolicy.MinimumExpanding,
+            QSizePolicy.Fixed
+        )
+
+        self.file_button.setMinimumWidth(
+            self.file_button.sizeHint().width()
+        )
+
         self.file_button.clicked.connect(self.select_file)
 
         # File selection layout
@@ -246,7 +255,7 @@ class DictionarySelectorDialog(QDialog):
                     chosen = scl
                     break
 
-            if not chosen:
+            if chosen is None:
                 continue
 
             scl = chosen
