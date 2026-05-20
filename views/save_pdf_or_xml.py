@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 from PyQt5.QtWidgets import (QDialog, QLabel, QPushButton,
-                             QVBoxLayout, QHBoxLayout, QFileDialog, QTextEdit, QMessageBox)
+                             QVBoxLayout, QHBoxLayout, QFileDialog, QTextEdit, QMessageBox, QSizePolicy)
 from PyQt5.QtCore import Qt
 
 from utils import pdf, db
@@ -57,6 +57,11 @@ class SavePDFOrXML(QDialog):
         self.path_display.setFixedHeight(30)
 
         self.select_path_button = QPushButton("Select the save path")
+        self.select_path_button.setSizePolicy(QSizePolicy.MinimumExpanding,QSizePolicy.Fixed)
+        # 但最小宽度不能小于文字完整显示宽度
+        self.select_path_button.setMinimumWidth(
+            self.select_path_button.sizeHint().width()
+        )
         self.select_path_button.clicked.connect(self.select_path)
 
         # 保存和取消按钮

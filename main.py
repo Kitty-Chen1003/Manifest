@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
@@ -21,6 +22,8 @@ from utils.common import normalize
 from utils.field_validation import validate_dataframe, handle_pl_postcode, export_error_excel, truncate_min_length_field
 
 from views.create_sads import CreateSADs
+from views.delete_main_data import DeleteMainDialog
+from views.delete_data_by_time import DeleteByTimeDialog
 from views.sad import SADWindow
 from views.import_dictionary import DictionarySelectorDialog
 
@@ -63,6 +66,24 @@ class MainWindow(QMainWindow):
                                'ConsignorCountry', 'ConsigneeName', 'ConsigneeStreetAndNr', 'ConsigneePostcode',
                                'ConsigneeCity', 'ConsigneeCountryCode', 'AirWayBill', 'IOSS', 'CountryOriginCode',
                                'ConsigneeNameID', 'Box Number', 'Dsk']
+
+        self.external_tools = [
+            {
+                "name": "process tool",
+                "folder": "process",
+                "exe": "main.exe"
+            },
+            {
+                "name": "grossmass tool",
+                "folder": "grossmass",
+                "exe": "GrossmassTool.exe"
+            },
+            {
+                "name": "mapper tool",
+                "folder": "mapper",
+                "exe": "excel_mapper.exe"
+            }
+        ]
 
         db.create_tables()
 
@@ -1003,9 +1024,9 @@ class MainWindow(QMainWindow):
 
         self.clear_data_action = QAction('Filter Data', self)
         self.delete_timed_out_data_action = QAction('Delete Timed Out Data', self)
-
+        self.delete_main_action = QAction('Delete Main Data', self)
+        self.delete_by_time_action = QAction('Delete Data By Time', self)
         self.import_dictionary_action = QAction('Import Dictionary', self)
-
         self.exit_login = QAction('Exit', self)
 
         # 添加新按钮到工具栏
@@ -1019,6 +1040,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()  # 再次添加分隔符以将新按钮与现有按钮分开
         toolbar.addAction(self.clear_data_action)
         toolbar.addAction(self.delete_timed_out_data_action)
+        toolbar.addAction(self.delete_main_action)
+        toolbar.addAction(self.delete_by_time_action)
 
         # 获取QToolButton并设置样式
         self.tool_button = toolbar.widgetForAction(self.clear_data_action)
@@ -1028,6 +1051,15 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.import_dictionary_action)
         toolbar.addSeparator()  # 再次添加分隔符以将新按钮与现有按钮分开
         toolbar.addAction(self.exit_login)
+
+        for tool in self.external_tools:
+            action = QAction(tool["name"], self)
+
+            toolbar.addSeparator()
+            toolbar.addAction(action)
+            action.triggered.connect(
+                lambda checked, t=tool: self.launch_external_tool(t)
+            )
 
         # 连接新按钮的触发信号
         self.send_zc415_action.triggered.connect(self.send_zc415)
@@ -1039,6 +1071,8 @@ class MainWindow(QMainWindow):
 
         self.clear_data_action.triggered.connect(self.clear_data)
         self.delete_timed_out_data_action.triggered.connect(self.delete_timed_out_data)
+        self.delete_main_action.triggered.connect(self.delete_main_data)
+        self.delete_by_time_action.triggered.connect(self.delete_data_by_time)
 
         self.import_dictionary_action.triggered.connect(self.import_dictionary)
 
@@ -1105,6 +1139,20 @@ class MainWindow(QMainWindow):
             self.time_flag = dialog.get_time_flag()
             print(self.datetime)
             print(self.time_flag)
+            self.update_upd_table()
+
+    def delete_main_data(self):
+        dialog = DeleteMainDialog(self.username, self.token)
+        if dialog.exec_() == QDialog.Accepted:
+            self.show_main_table()
+            self.update_main_table()
+            self.update_upd_table()
+
+    def delete_data_by_time(self):
+        dialog = DeleteByTimeDialog(self.username, self.token)
+        if dialog.exec_() == QDialog.Accepted:
+            self.show_main_table()
+            self.update_main_table()
             self.update_upd_table()
 
     def delete_timed_out_data(self):
@@ -1498,6 +1546,46 @@ class MainWindow(QMainWindow):
 
     # def synchronize_user_information(self):
     #     pass
+
+    def launch_external_tool(self, tool):
+        try:
+            # 兼容 pyinstaller
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+
+            # tools/tool_xxx
+            tool_dir = os.path.join(
+                base_dir,
+                "tools",
+                tool["folder"]
+            )
+
+            # exe 路径
+            exe_path = os.path.join(tool_dir,tool["exe"])
+
+            # 检查文件
+            if not os.path.exists(exe_path):
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Cannot find:\n{exe_path}"
+                )
+                return
+
+            # 启动程序
+            subprocess.Popen(
+                [exe_path],
+                cwd=tool_dir
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Launch Failed",
+                str(e)
+            )
 
 
 if __name__ == '__main__':

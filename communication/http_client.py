@@ -912,3 +912,55 @@ def delete_corresponding_data_by_main_ids(token, data):
     except Exception as err:
         print(f"An unexpected error occurred: {err}")
         return None  # 捕获所有其他类型的异常并返回 None
+
+
+def delete_data_by_main_ids(token, payload):
+    headers = {'Authorization': f'Bearer {token}'}
+    try:
+        # 发送 GET 请求
+        response = requests.post(url + '/api/data/delete/by-main-table-id', headers=headers, json=payload)
+
+        # 检查响应状态码是否为 200
+        response.raise_for_status()  # 如果响应状态码是 4xx 或 5xx，将引发 httpsError
+        # 尝试解析响应的 JSON 数据
+        try:
+            return response.json().get('code')  # 返回解析后的 JSON 数据
+        except ValueError:
+            print("Error: Response is not valid JSON.")
+            return None  # 如果响应体不是有效的 JSON 格式，返回 None
+
+    except requests.exceptions.HTTPError as https_err:
+        print(f"https error occurred: {https_err}")
+        return None  # 如果发生 https 错误，返回 None
+    except requests.exceptions.RequestException as req_err:
+        print(f"Request error occurred: {req_err}")
+        return None  # 如果发生请求相关错误，返回 None
+    except Exception as err:
+        print(f"An unexpected error occurred: {err}")
+        return None  # 捕获所有其他类型的异常并返回 None
+
+
+def delete_data_by_time(token, payload):
+    headers = {'Authorization': f'Bearer {token}'}
+    try:
+        # 发送 GET 请求
+        response = requests.post(url + '/api/data/delete/by-time', headers=headers, json=payload)
+
+        # 检查响应状态码是否为 200
+        response.raise_for_status()  # 如果响应状态码是 4xx 或 5xx，将引发 httpsError
+        # 尝试解析响应的 JSON 数据
+        try:
+            return response.json().get('code')  # 返回解析后的 JSON 数据
+        except ValueError:
+            print("Error: Response is not valid JSON.")
+            return None  # 如果响应体不是有效的 JSON 格式，返回 None
+
+    except requests.exceptions.HTTPError as https_err:
+        print(f"https error occurred: {https_err}")
+        return None  # 如果发生 https 错误，返回 None
+    except requests.exceptions.RequestException as req_err:
+        print(f"Request error occurred: {req_err}")
+        return None  # 如果发生请求相关错误，返回 None
+    except Exception as err:
+        print(f"An unexpected error occurred: {err}")
+        return None  # 捕获所有其他类型的异常并返回 None

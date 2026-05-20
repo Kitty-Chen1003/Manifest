@@ -44,6 +44,16 @@ def create_tables():
                               AirWayBill TEXT
                           )''')
 
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_main_sequence
+            ON MainExcelTable(sequence);
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_main_created_at
+            ON MainExcelTable(created_at);
+        ''')
+
         # 创建子表 SubExcelTable
         cursor.execute('''CREATE TABLE IF NOT EXISTS SubExcelTable (
                               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +70,16 @@ def create_tables():
                               FOREIGN KEY (main_id) REFERENCES MainExcelTable (sequence)
                           )''')
 
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sub_main_id
+            ON SubExcelTable(main_id);
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sub_event_time
+            ON SubExcelTable(event_time);
+        ''')
+
         # 创建数据表 SubExcelData
         cursor.execute('''CREATE TABLE IF NOT EXISTS SubExcelData (
                               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +94,11 @@ def create_tables():
                               username TEXT,    -- 新增：用户名
                               FOREIGN KEY (sub_table_id) REFERENCES SubExcelTable (sequence)
                           )''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_subexceldata_sub_table_id
+            ON SubExcelData(sub_table_id);
+        ''')
 
         # 创建新表 SubXMLData
         cursor.execute('''CREATE TABLE IF NOT EXISTS SubXMLData (
@@ -120,6 +145,21 @@ def create_tables():
         );
         ''')
 
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_subxml_main_table_id
+            ON SubXMLData(main_table_id);
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_subxml_sub_table_id
+            ON SubXMLData(sub_table_id);
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_subxml_event_time
+            ON SubXMLData(event_time);
+        ''')
+
         # cursor.execute('''
         #     CREATE TABLE IF NOT EXISTS SignatureForm (
         #         id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 主键，自增
@@ -138,11 +178,22 @@ def create_tables():
                 main_id TEXT,
                 data TEXT,
                 data_hash TEXT,   -- 新增字段
+                sign_time TEXT,
                 direction TEXT,
                 related_id TEXT,
                 type TEXT,
                 username TEXT
             );
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_signature_sign_time
+            ON SignatureForm(sign_time);
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_signature_related_id
+            ON SignatureForm(related_id);
         ''')
 
         cursor.execute('''
@@ -2170,6 +2221,50 @@ def get_id_and_airwaybill_from_main_table_by_state_sent(username):
         if conn:
             conn.close()
 
+
+def get_id_airwaybill_time_from_main_table(username):
+    conn = None
+    cursor = None
+    try:
+        # 创建数据库连接
+        conn = sqlite3.connect(db_path)  # 替换为您的数据库路径
+        cursor = conn.cursor()
+
+        # 执行查询，获取 sequence 和 AirWayBill
+        cursor.execute('''
+            SELECT sequence, AirWayBill, created_at
+            FROM MainExcelTable 
+            WHERE username = ? AND deleted_at IS NULL
+            ORDER BY created_at DESC
+        ''', (username,))
+
+        # 提取查询结果
+        sequences = []
+        airway_bills = []
+        created_at = []
+
+        for row in cursor.fetchall():
+            sequences.append(row[0])  # sequence
+            airway_bills.append(row[1])  # AirWayBill
+            created_at.append(row[2])
+
+        logging.info(f"成功获取用户名为 {username} 的记录，序列号数：{len(sequences)}")
+
+        return [sequences, airway_bills, created_at]
+    except sqlite3.Error as e:
+        # 捕获数据库相关错误
+        logging.error(f"数据库错误: {e}")
+        return None
+    except Exception as e:
+        # 捕获其他未知错误
+        logging.error(f"获取数据时发生错误: {e}")
+        return None
+    finally:
+        # 确保数据库连接关闭
+        if conn:
+            conn.close()
+
+
 def get_id_airwaybill_time_from_main_table_by_state_sent(username):
     """
     获取指定用户名且状态为 'Sent' 的 MainExcelTable 中的 sequence 和 AirWayBill。
@@ -2218,6 +2313,7 @@ def get_id_airwaybill_time_from_main_table_by_state_sent(username):
         # 确保数据库连接关闭
         if conn:
             conn.close()
+
 
 def get_id_and_airwaybill_from_main_table_by_state_not_sent(username):
     """
@@ -3681,10 +3777,13 @@ def synchronize_signature_form_login(cursor, signature_datas):
             # 计算 data_json 和 hash
             data_json, data_hash = compute_data_hash(data_dict)
 
+            sign_time = extract_signature_time_str(data_dict)
+
             batch_values.append((
                 main_id,
                 data_json,
                 data_hash,
+                sign_time,
                 username,
                 direction,
                 related_id,
@@ -3694,8 +3793,8 @@ def synchronize_signature_form_login(cursor, signature_datas):
         if batch_values:
             cursor.executemany("""
                 INSERT OR IGNORE INTO SignatureForm
-                (main_id, data, data_hash, username, direction, related_id, type)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (main_id, data, data_hash, sign_time, username, direction, related_id, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, batch_values)
             logging.info(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
             print(f"成功批量插入 {cursor.rowcount} 条 SignatureForm 数据。")
@@ -3741,6 +3840,8 @@ def synchronize_signature_form(signature_datas):
             # 将 data_dict 转换为 JSON 字符串
             data_json = json.dumps(data_dict, ensure_ascii=False)
 
+            sign_time = extract_signature_time_str(data_dict)
+
             # 检查数据库是否已存在相同记录
             cursor.execute('''
                 SELECT COUNT(*)
@@ -3752,9 +3853,9 @@ def synchronize_signature_form(signature_datas):
             # 如果数据不存在，则插入
             if count == 0:
                 cursor.execute('''
-                    INSERT INTO SignatureForm (main_id, data, username, direction, related_id, type)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (message_id, data_json, username, direction, related_id, type_value))
+                    INSERT INTO SignatureForm (main_id, data, sign_time, username, direction, related_id, type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (message_id, data_json, sign_time, username, direction, related_id, type_value))
 
         # 提交事务
         conn.commit()
@@ -3922,6 +4023,7 @@ def get_tracking_numbers_by_sub_ids(username, sub_ids):
         if conn:
             conn.close()
 
+
 def query_zc428_mrn_by_lrn(lrn):
     conn = None
     try:
@@ -3947,3 +4049,261 @@ def query_zc428_mrn_by_lrn(lrn):
     finally:
         if conn:
             conn.close()
+
+
+def delete_by_main_ids(selected_ids):
+    """
+    删除 main_id 关联的所有数据
+    """
+
+    if not selected_ids:
+        return False
+
+    conn = None
+    cursor = None
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        delete_stats = {
+            "SignatureForm": 0,
+            "SubExcelData": 0,
+            "SubXmlData_by_sub": 0,
+            "SubXmlData_by_main": 0,
+            "SubExcelTable": 0,
+            "MainExcelTable": 0
+        }
+
+        # ==================================================
+        # 1. 获取所有关联 sub_id
+        # ==================================================
+
+        placeholders = ",".join(["?"] * len(selected_ids))
+
+        cursor.execute(f"""
+            SELECT sequence
+            FROM SubExcelTable
+            WHERE main_id IN ({placeholders})
+        """, selected_ids)
+
+        sub_ids = [row[0] for row in cursor.fetchall()]
+
+        # ==================================================
+        # 2. 删除 SignatureForm
+        # ==================================================
+
+        if sub_ids:
+            sub_placeholders = ",".join(["?"] * len(sub_ids))
+
+            cursor.execute(f"""
+                DELETE FROM SignatureForm
+                WHERE related_id IN ({sub_placeholders})
+            """, sub_ids)
+
+            delete_stats["SignatureForm"] = cursor.rowcount
+
+            # ==================================================
+            # 3. 删除 SubExcelData
+            # ==================================================
+            cursor.execute(f"""
+                DELETE FROM SubExcelData
+                WHERE sub_table_id IN ({sub_placeholders})
+            """, sub_ids)
+            delete_stats["SubExcelData"] = cursor.rowcount
+
+            # ==================================================
+            # 4. 删除 SubXmlData
+            # ==================================================
+            # 根据 sub_id 删除
+            cursor.execute(f"""
+                DELETE FROM SubXmlData
+                WHERE sub_table_id IN ({sub_placeholders})
+            """, sub_ids)
+            delete_stats["SubXmlData_by_sub"] = cursor.rowcount
+
+        # 根据 main_id 删除
+        cursor.execute(f"""
+            DELETE FROM SubXmlData
+            WHERE main_table_id IN ({placeholders})
+        """, selected_ids)
+
+        delete_stats["SubXmlData_by_main"] = cursor.rowcount
+
+        # ==================================================
+        # 5. 删除 SubExcelTable
+        # ==================================================
+
+        cursor.execute(f"""
+            DELETE FROM SubExcelTable
+            WHERE main_id IN ({placeholders})
+        """, selected_ids)
+        delete_stats["SubExcelTable"] = cursor.rowcount
+
+        # ==================================================
+        # 6. 删除 MainExcelTable
+        # ==================================================
+
+        cursor.execute(f"""
+            DELETE FROM MainExcelTable
+            WHERE sequence IN ({placeholders})
+        """, selected_ids)
+
+        delete_stats["MainExcelTable"] = cursor.rowcount
+
+        for table_name, count in delete_stats.items():
+            print(f"{table_name}: {count}")
+
+        conn.commit()
+        return delete_stats
+
+    except sqlite3.DatabaseError as e:
+        logging.error(f"数据库错误: {e}，main_ids: {selected_ids}")
+        print(f"数据库错误: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        logging.error(f"未知错误: {e}，main_ids: {selected_ids}")
+        print(f"未知错误: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_by_time(start_time, end_time):
+    conn = None
+    cursor = None
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        delete_stats = {
+            "MainCascadeDelete": {},
+            "Extra_SubExcelTable": 0,
+            "Extra_SubXmlData": 0,
+            "Extra_SignatureForm": 0
+        }
+
+        # ==================================================
+        # 1. 找到时间范围内的 main_ids
+        # ==================================================
+
+        cursor.execute("""
+            SELECT sequence
+            FROM MainExcelTable
+            WHERE created_at BETWEEN ? AND ?
+        """, (start_time, end_time))
+
+        rows = cursor.fetchall()
+
+        main_ids = [row[0] for row in rows]
+
+        # ==================================================
+        # 2. 先执行标准级联删除
+        # ==================================================
+
+        if main_ids:
+            cascade_stats = delete_by_main_ids(main_ids)
+
+            if cascade_stats:
+                delete_stats["MainCascadeDelete"] = cascade_stats
+
+        # ==================================================
+        # 3. 额外删除 SubExcelTable
+        # ==================================================
+
+        cursor.execute("""
+            DELETE FROM SubExcelTable
+            WHERE event_time BETWEEN ? AND ?
+        """, (start_time, end_time))
+
+        delete_stats["Extra_SubExcelTable"] = cursor.rowcount
+
+        # ==================================================
+        # 4. 额外删除 SubXmlData
+        # ==================================================
+
+        cursor.execute("""
+            DELETE FROM SubXmlData
+            WHERE event_time BETWEEN ? AND ?
+        """, (start_time, end_time))
+
+        delete_stats["Extra_SubXmlData"] = cursor.rowcount
+
+        # ==================================================
+        # 5. 额外删除 SignatureForm
+        # ==================================================
+
+        cursor.execute("""
+            DELETE FROM SignatureForm
+            WHERE sign_time IS NOT NULL
+            AND sign_time BETWEEN ? AND ?
+        """, (start_time, end_time))
+
+        delete_stats["Extra_SignatureForm"] = cursor.rowcount
+
+        print("\n===== delete_by_time 删除统计 =====")
+
+        cascade = delete_stats["MainCascadeDelete"]
+
+        if cascade:
+            print("\n--- 主级联删除 ---")
+            for k, v in cascade.items():
+                print(f"{k}: {v}")
+
+        print("\n--- 时间范围额外删除 ---")
+        print(f"SubExcelTable: {delete_stats['Extra_SubExcelTable']}")
+        print(f"SubXmlData: {delete_stats['Extra_SubXmlData']}")
+        print(f"SignatureForm: {delete_stats['Extra_SignatureForm']}")
+
+        conn.commit()
+        return True
+
+    except sqlite3.DatabaseError as e:
+        logging.error(f"数据库错误: {e}")
+        print(f"数据库错误: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        logging.error(f"delete_by_time未知错误: {e}")
+        print("delete_by_time error:", e)
+        if conn:
+            conn.rollback()
+        return False
+
+    finally:
+        if conn:
+            conn.close()
+
+
+def extract_signature_time_str(data_dict):
+    """
+    从 signature json 中提取时间字符串
+    返回格式:
+        2026-02-08 18:18:44
+    """
+
+    try:
+
+        time_str = (
+                data_dict.get("signingTime")
+                or data_dict.get("SigningTime")
+        )
+
+        if not time_str:
+            return None
+
+        dt = datetime.strptime(
+            time_str,
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    except Exception:
+        return None

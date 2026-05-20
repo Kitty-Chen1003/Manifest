@@ -2,7 +2,7 @@ import sys
 import pytz
 from PyQt5.QtWidgets import (
     QDialog, QApplication, QVBoxLayout, QHBoxLayout, QLabel,
-    QSpinBox, QPushButton
+    QSpinBox, QPushButton, QSizePolicy
 )
 from datetime import datetime
 
@@ -12,7 +12,8 @@ class DateTimeDialog(QDialog):
         super().__init__()
 
         self.setWindowTitle("Enter filter date")
-        self.setFixedSize(500, 200)
+        self.resize(500, 200)
+        self.setMinimumSize(500, 200)
         self.flag = flag
 
         # 获取波兰当前时间（CET/CEST）
@@ -25,8 +26,16 @@ class DateTimeDialog(QDialog):
         # 创建筛选状态布局
         filter_layout = QHBoxLayout()
         self.filter_status_label = QLabel("Current status: Closed")
+
+        self.filter_status_label.setMinimumWidth(
+            self.filter_status_label.sizeHint().width()
+        )
+
         self.enable_filter_button = QPushButton("Enable time filtering")
         self.disable_filter_button = QPushButton("Close time filter")
+
+        self.setup_button(self.enable_filter_button)
+        self.setup_button(self.disable_filter_button)
 
         self.enable_filter_button.clicked.connect(self.enable_time_filter)
         self.disable_filter_button.clicked.connect(self.disable_time_filter)
@@ -49,11 +58,25 @@ class DateTimeDialog(QDialog):
         self.day_spin.setRange(1, 31)
         self.day_spin.setValue(pl_time.day)
 
-        date_layout.addWidget(QLabel("Year"))
+        self.setup_spinbox(self.year_spin)
+        self.setup_spinbox(self.month_spin)
+        self.setup_spinbox(self.day_spin)
+
+        year_label = QLabel("Year")
+        month_label = QLabel("Month")
+        day_label = QLabel("Day")
+
+        self.setup_label(year_label)
+        self.setup_label(month_label)
+        self.setup_label(day_label)
+
+        date_layout.addWidget(year_label)
         date_layout.addWidget(self.year_spin)
-        date_layout.addWidget(QLabel("Month"))
+
+        date_layout.addWidget(month_label)
         date_layout.addWidget(self.month_spin)
-        date_layout.addWidget(QLabel("Day"))
+
+        date_layout.addWidget(day_label)
         date_layout.addWidget(self.day_spin)
 
         # 小时分钟秒布局
@@ -70,11 +93,25 @@ class DateTimeDialog(QDialog):
         self.second_spin.setRange(0, 59)
         self.second_spin.setValue(pl_time.second)
 
-        time_layout.addWidget(QLabel("Hour"))
+        self.setup_spinbox(self.hour_spin)
+        self.setup_spinbox(self.minute_spin)
+        self.setup_spinbox(self.second_spin)
+
+        hour_label = QLabel("Hour")
+        minute_label = QLabel("Minute")
+        second_label = QLabel("Second")
+
+        self.setup_label(hour_label)
+        self.setup_label(minute_label)
+        self.setup_label(second_label)
+
+        time_layout.addWidget(hour_label)
         time_layout.addWidget(self.hour_spin)
-        time_layout.addWidget(QLabel("Minute"))
+
+        time_layout.addWidget(minute_label)
         time_layout.addWidget(self.minute_spin)
-        time_layout.addWidget(QLabel("Second"))
+
+        time_layout.addWidget(second_label)
         time_layout.addWidget(self.second_spin)
 
         # 按钮布局
@@ -82,13 +119,16 @@ class DateTimeDialog(QDialog):
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
 
+        self.setup_button(self.ok_button)
+        self.setup_button(self.cancel_button)
+
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
 
+        self.ok_button.setDefault(True)
+
         button_layout.addWidget(self.ok_button)
         button_layout.addWidget(self.cancel_button)
-
-        self.ok_button.setDefault(True)
 
         # 添加组件到主布局
         main_layout.addLayout(filter_layout)  # 添加状态和按钮
@@ -103,6 +143,45 @@ class DateTimeDialog(QDialog):
 
         if self.flag:
             self.enable_time_filter()
+
+    def setup_button(self, button):
+        """
+        按钮：
+        1. 可以横向扩展
+        2. 不会被压缩到文字显示不全
+        """
+
+        button.setSizePolicy(
+            QSizePolicy.MinimumExpanding,
+            QSizePolicy.Fixed
+        )
+
+        button.setMinimumWidth(
+            button.sizeHint().width()
+        )
+
+    def setup_label(self, label):
+        """
+        防止 QLabel 被压缩导致文字显示不全
+        """
+
+        label.setMinimumWidth(
+            label.sizeHint().width()
+        )
+
+    def setup_spinbox(self, spinbox):
+        """
+        防止 SpinBox 数字显示不全
+        """
+
+        spinbox.setSizePolicy(
+            QSizePolicy.Minimum,
+            QSizePolicy.Fixed
+        )
+
+        spinbox.setMinimumWidth(
+            spinbox.sizeHint().width()
+        )
 
     def enable_time_filter(self):
         """启用时间筛选，允许修改日期时间"""
