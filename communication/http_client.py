@@ -747,7 +747,11 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
 
                     if main_id not in signature_cache:
                         signature_cache[main_id] = (
-                            db.get_main_table_data_by_sequence(main_id)['representative contact person'][0]
+                            # 旧版从代表联系人取值，保留备用。
+                            # db.get_main_table_data_by_sequence(main_id)['representative contact person'][0]
+
+                            # 没有传入签名信息时，使用申报人的第一个联系人。
+                            db.get_main_table_data_by_sequence(main_id)['contact person'][0]
                             if not signature_info else signature_info
                         )
                     sig_info = signature_cache[main_id]
@@ -787,8 +791,13 @@ def upload_reply_message(token, data, file_path, password, signature_info=None):
                     if main_id != index_main_id:
                         index_main_id = main_id
                         if not signature_info:
+                            # 旧版从代表联系人取值，保留备用。
+                            # signature_information = db.get_main_table_data_by_sequence(index_main_id)[
+                            #     'representative contact person'][0]
+
+                            # 没有传入签名信息时，使用申报人的第一个联系人。
                             signature_information = db.get_main_table_data_by_sequence(index_main_id)[
-                                'representative contact person'][0]
+                                'contact person'][0]
                         else:
                             signature_information = signature_info
 

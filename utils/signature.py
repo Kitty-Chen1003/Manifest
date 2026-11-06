@@ -1,3 +1,6 @@
+import os
+
+import certifi
 import xmlsig
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -6,7 +9,11 @@ from lxml import etree
 from xades import XAdESContext, template, utils
 from xades.policy import GenericPolicyId
 
+os.environ["SSL_CERT_FILE"] = certifi.where()
+
 POLICY_ID = "https://isap.sejm.gov.pl/isap.nsf/download.xsp/WDU20170001802/O/D20171802.pdf"
+POLICY_ID = "https://eli.gov.pl/api/acts/DU/2017/1802/text/O/D20171802.pdf"
+POLICY_ID = "https://api.sejm.gov.pl/eli/acts/DU/2017/1802/text.pdf"
 POLICY_NAME = "w sprawie sposobu przesyłania deklaracji i podań oraz rodzajów podpisu elektronicznego"
 
 

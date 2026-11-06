@@ -244,14 +244,14 @@ class InputMultipleElements(QDialog):
             if not len(current_inputs[1].text()) == 4:
                 QMessageBox.warning(self, "Input Error", f"{current_key_names[1]} must be 4 digits.")
                 return
-            if len(current_inputs[2].text()) > 0:
-                if current_inputs[2].text().isdigit():
-                    if not len(current_inputs[2].text()) <= 5:
-                        QMessageBox.warning(self, "Input Error", f"{current_key_names[2]} must be no more than 5 digits.")
-                        return
-                else:
-                    QMessageBox.warning(self, "Input Error", f"{current_key_names[2]} must be an integer.")
-                    return
+            # if len(current_inputs[2].text()) > 0:
+            #     if current_inputs[2].text().isdigit():
+            #         if not len(current_inputs[2].text()) <= 5:
+            #             QMessageBox.warning(self, "Input Error", f"{current_key_names[2]} must be no more than 5 digits.")
+            #             return
+            #     else:
+            #         QMessageBox.warning(self, "Input Error", f"{current_key_names[2]} must be an integer.")
+            #         return
         elif self.index in [31, 40]:
             if self.table_widget.rowCount() == 99:
                 QMessageBox.warning(self, "Input Error", f"The number of {self.title} must be no more than 99.")
@@ -277,10 +277,14 @@ class InputMultipleElements(QDialog):
             if self.table_widget.rowCount() == 99:
                 QMessageBox.warning(self, "Input Error", f"The number of {self.title} must be no more than 99.")
                 return
-            if not len(current_inputs[0].text()) == 3:
-                QMessageBox.warning(self, "Input Error", f"{current_key_names[0]} must be 3 digits.")
+            # if not len(current_inputs[0].text()) == 3:
+            #     QMessageBox.warning(self, "Input Error", f"{current_key_names[0]} must be 3 digits.")
+            #     return
+            if current_inputs[0].text().strip() != "F48":
+                QMessageBox.warning(
+                    self, "Input Error",f"{current_key_names[0]} must be F48."
+                )
                 return
-
         # 获取输入框数据
         row_data = [le.text().strip() for le in current_inputs]  # 获取输入框的值，并去除空格
         row_position = self.table_widget.rowCount()

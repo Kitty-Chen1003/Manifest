@@ -253,95 +253,95 @@ class SADInformation(QLabel):
                         text=self.information_declaration[sequence_number_declaration]['ConsigneeCountryCode']
                     )
 
-                if self.input_information['representative status'] != '2':
-                    zc415hub_declaration_declarant = xml_gen.add_sub_element(
-                        zc415hub_declaration,
-                        'Declarant'
-                    )
+                # if self.input_information['representative status'] != '2':
+                #     zc415hub_declaration_declarant = xml_gen.add_sub_element(
+                #         zc415hub_declaration,
+                #         'Declarant'
+                #     )
 
-                    if self.input_information['representative status'] == '3':
-                        zc415hub_declaration_declarant_identificationnumber = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant,
-                            'identificationNumber',
-                            text=self.input_information['declarant identification number']
-                        )
-                    else:
-                        if self.input_information['declarant name'] != '':
-                            zc415hub_declaration_declarant_name = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant,
-                                'name',
-                                text=self.input_information['declarant name']
-                            )
-
-                        if self.input_information['declarant identification number'] != '':
-                            zc415hub_declaration_declarant_identificationnumber = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant,
-                                'identificationNumber',
-                                text=self.input_information['declarant identification number']
-                            )
-
-                        if self.input_information['declarant street and number'] != '' and self.input_information[
-                            'declarant postcode'] != '' and self.input_information['declarant city'] != '' and \
-                                self.input_information['declarant country'] != '':
-                            zc415hub_declaration_declarant_address = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant,
-                                'Address'
-                            )
-
-                            zc415hub_declaration_declarant_address_streetandnumber = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant_address,
-                                'streetAndNumber',
-                                text=self.input_information['declarant street and number']
-                            )
-
-                            zc415hub_declaration_declarant_address_postcode = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant_address,
-                                'postcode',
-                                text=self.input_information['declarant postcode']
-                            )
-
-                            zc415hub_declaration_declarant_address_city = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant_address,
-                                'city',
-                                text=self.input_information['declarant city']
-                            )
-
-                            zc415hub_declaration_declarant_address_country = xml_gen.add_sub_element(
-                                zc415hub_declaration_declarant_address,
-                                'country',
-                                text=self.input_information['declarant country']
-                            )
-
-                    for k in range(len(self.input_information['contact person'])):
-                        contact_person = self.input_information['contact person'][k]
-                        zc415hub_declaration_declarant_contactperson = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant,
-                            'ContactPerson'
-                        )
-
-                        zc415hub_declaration_declarant_contactperson_sequencenumber = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant_contactperson,
-                            'sequenceNumber',
-                            text=str(k + 1)
-                        )
-
-                        zc415hub_declaration_declarant_contactperson_name = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant_contactperson,
-                            'name',
-                            text=contact_person['name']
-                        )
-
-                        zc415hub_declaration_declarant_contactperson_phonenumber = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant_contactperson,
-                            'phoneNumber',
-                            text=contact_person['phoneNumber']
-                        )
-
-                        zc415hub_declaration_declarant_contactperson_emailaddress = xml_gen.add_sub_element(
-                            zc415hub_declaration_declarant_contactperson,
-                            'eMailAddress',
-                            text=contact_person['eMailAddress']
-                        )
+                    # if self.input_information['representative status'] == '3':
+                    #     zc415hub_declaration_declarant_identificationnumber = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant,
+                    #         'identificationNumber',
+                    #         text=self.input_information['declarant identification number']
+                    #     )
+                    # else:
+                    #     if self.input_information['declarant name'] != '':
+                    #         zc415hub_declaration_declarant_name = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant,
+                    #             'name',
+                    #             text=self.input_information['declarant name']
+                    #         )
+                    #
+                    #     if self.input_information['declarant identification number'] != '':
+                    #         zc415hub_declaration_declarant_identificationnumber = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant,
+                    #             'identificationNumber',
+                    #             text=self.input_information['declarant identification number']
+                    #         )
+                    #
+                    #     if self.input_information['declarant street and number'] != '' and self.input_information[
+                    #         'declarant postcode'] != '' and self.input_information['declarant city'] != '' and \
+                    #             self.input_information['declarant country'] != '':
+                    #         zc415hub_declaration_declarant_address = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant,
+                    #             'Address'
+                    #         )
+                    #
+                    #         zc415hub_declaration_declarant_address_streetandnumber = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant_address,
+                    #             'streetAndNumber',
+                    #             text=self.input_information['declarant street and number']
+                    #         )
+                    #
+                    #         zc415hub_declaration_declarant_address_postcode = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant_address,
+                    #             'postcode',
+                    #             text=self.input_information['declarant postcode']
+                    #         )
+                    #
+                    #         zc415hub_declaration_declarant_address_city = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant_address,
+                    #             'city',
+                    #             text=self.input_information['declarant city']
+                    #         )
+                    #
+                    #         zc415hub_declaration_declarant_address_country = xml_gen.add_sub_element(
+                    #             zc415hub_declaration_declarant_address,
+                    #             'country',
+                    #             text=self.input_information['declarant country']
+                    #         )
+                    #
+                    # for k in range(len(self.input_information['contact person'])):
+                    #     contact_person = self.input_information['contact person'][k]
+                    #     zc415hub_declaration_declarant_contactperson = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant,
+                    #         'ContactPerson'
+                    #     )
+                    #
+                    #     zc415hub_declaration_declarant_contactperson_sequencenumber = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant_contactperson,
+                    #         'sequenceNumber',
+                    #         text=str(k + 1)
+                    #     )
+                    #
+                    #     zc415hub_declaration_declarant_contactperson_name = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant_contactperson,
+                    #         'name',
+                    #         text=contact_person['name']
+                    #     )
+                    #
+                    #     zc415hub_declaration_declarant_contactperson_phonenumber = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant_contactperson,
+                    #         'phoneNumber',
+                    #         text=contact_person['phoneNumber']
+                    #     )
+                    #
+                    #     zc415hub_declaration_declarant_contactperson_emailaddress = xml_gen.add_sub_element(
+                    #         zc415hub_declaration_declarant_contactperson,
+                    #         'eMailAddress',
+                    #         text=contact_person['eMailAddress']
+                    #     )
 
                 zc415hub_declaration_representative = xml_gen.add_sub_element(
                     zc415hub_declaration,
@@ -354,19 +354,18 @@ class SADInformation(QLabel):
                     text=self.input_information['representative status']
                 )
 
-                if self.input_information['representative status'] == '2':
+                # if self.input_information['representative status'] == '2':
+                #     zc415hub_declaration_representative_identificationnumber = xml_gen.add_sub_element(
+                #         zc415hub_declaration_representative,
+                #         'identificationNumber',
+                #         text=self.input_information['representative identification number']
+                #     )
+                if self.input_information['representative identification number'] != '':
                     zc415hub_declaration_representative_identificationnumber = xml_gen.add_sub_element(
                         zc415hub_declaration_representative,
                         'identificationNumber',
                         text=self.input_information['representative identification number']
                     )
-                else:
-                    if self.input_information['representative identification number'] != '':
-                        zc415hub_declaration_representative_identificationnumber = xml_gen.add_sub_element(
-                            zc415hub_declaration_representative,
-                            'identificationNumber',
-                            text=self.input_information['representative identification number']
-                        )
 
                 for k in range(len(self.input_information['representative contact person'])):
                     representative_contact_person = self.input_information['representative contact person'][k]

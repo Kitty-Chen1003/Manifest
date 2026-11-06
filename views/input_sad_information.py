@@ -421,6 +421,10 @@ class InputSADInformationDialog(QDialog):
         # for i in range(len(self.text_all_line_edits)):
         #     all_line_edits[i].setText(self.text_all_line_edits[i])
 
+        # 上面的配置加载循环已经结束。
+        # 清空新版不使用的身份字段，并开放申报人 EORI、联系人按钮。
+        self.apply_declarant_rules()
+
         # Show the initial set for "pole 1"
         self.update_input_fields(index)
         self.buttons[index].setStyleSheet(self.nav_button_sheetstyle_active)
@@ -434,7 +438,8 @@ class InputSADInformationDialog(QDialog):
         self.main_layout.addWidget(dialog_buttons)
 
     def adding_constraints(self):
-        self.all_line_edits[11].textChanged.connect(self.representative_status_changed)
+        # 旧版根据 status 切换身份字段，新版不再使用此联动。
+        # self.all_line_edits[11].textChanged.connect(self.representative_status_changed)
         self.all_line_edits[14].textChanged.connect(self.type_of_location_changed)
         self.all_line_edits[15].textChanged.connect(self.qualifier_of_identification_changed)
 
@@ -450,35 +455,57 @@ class InputSADInformationDialog(QDialog):
         # self.all_line_edits[22].textChanged.connect(self.additional_identifier_changed)
         for i in range(3, 14):
             self.prohibit_select(i)
-        self.restore_select(11)
+        # 旧版开放 status 供用户选择，新版保留控件但不开放。
+        # self.restore_select(11)
         for i in range(16, 29):
             self.prohibit_select(i)
 
-    def representative_status_changed(self):
-        if self.all_line_edits[11].text() == '2':
-            self.restore_select(10)
-            # for i in range(12, 13):
-            self.restore_select(12)
-        elif self.all_line_edits[11].text() == '3':
-            for i in range(3, 13):
-                self.restore_select(i)
-            self.prohibit_select(3)
-            for i in range(5, 9):
-                self.prohibit_select(i)
-            self.prohibit_select(10)
-        elif self.all_line_edits[11].text() == '1':
-            for i in range(3, 13):
-                self.restore_select(i)
-        else:
-            for i in range(3, 13):
-                self.prohibit_select(i)
-            self.restore_select(11)
-            for i in range(3, 13):
-                self.all_line_edits[i].setText('')
-            self.input_information['contact person'] = []
-            self.input_information['representative contact person'] = []
-        # self.all_line_edits[9].setReadOnly(True)
-        # self.all_line_edits[12].setReadOnly(True)
+    def apply_declarant_rules(self):
+        """新版固定使用 Declarant EORI，不再根据 status 切换身份。"""
+
+        # 停用并清空：
+        # 3、5～8：申报人名称、地址
+        # 10、11、12：代表 EORI、status、代表联系人
+        for i in [3, 5, 6, 7, 8, 10, 11, 12]:
+            self.prohibit_select(i)
+            self.all_line_edits[i].setText("")
+
+        # 普通字符串字段会由 get_input_information() 根据输入框保存。
+        # 代表联系人是列表，保存函数会跳过它，因此这里必须单独清空。
+        self.input_information["representative contact person"] = []
+
+        # 开放申报人 EORI 输入框和选择按钮。
+        self.restore_select(4)
+
+        # 开放申报人联系人的 Details 按钮。
+        # 摘要输入框沿用 adding_constraints() 设置的只读状态。
+        self.restore_detail(9)
+
+    # def representative_status_changed(self):
+    #     if self.all_line_edits[11].text() == '2':
+    #         self.restore_select(10)
+    #         # for i in range(12, 13):
+    #         self.restore_select(12)
+    #     elif self.all_line_edits[11].text() == '3':
+    #         for i in range(3, 13):
+    #             self.restore_select(i)
+    #         self.prohibit_select(3)
+    #         for i in range(5, 9):
+    #             self.prohibit_select(i)
+    #         self.prohibit_select(10)
+    #     elif self.all_line_edits[11].text() == '1':
+    #         for i in range(3, 13):
+    #             self.restore_select(i)
+    #     else:
+    #         for i in range(3, 13):
+    #             self.prohibit_select(i)
+    #         self.restore_select(11)
+    #         for i in range(3, 13):
+    #             self.all_line_edits[i].setText('')
+    #         self.input_information['contact person'] = []
+    #         self.input_information['representative contact person'] = []
+    #     # self.all_line_edits[9].setReadOnly(True)
+    #     # self.all_line_edits[12].setReadOnly(True)
 
     def type_of_location_changed(self):
         # print(self.all_line_edits[14].text())

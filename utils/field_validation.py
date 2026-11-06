@@ -34,11 +34,16 @@ FIELD_RULES = {
         pattern=r"^[\w\d]{6,}$"
     ),
 
+    # "Total Price": FieldRule(
+    #     max_length=17,
+    #     pattern=r"^\d+(\.\d{1,2})?$"
+    # ),
+
     "Total Price": FieldRule(
         max_length=17,
-        pattern=r"^\d+(\.\d{1,2})?$"
+        # 至少包含一个非零数字，排除 0、0.0、0.00；最多两位小数。
+        pattern=r"^(?=.*[1-9])\d+(\.\d{1,2})?$"
     ),
-
     "GrossMassKg": FieldRule(
         max_length=17,
         pattern=r"^\d+(\.\d{1,6})?$"

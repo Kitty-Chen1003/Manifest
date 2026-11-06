@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
                                'DescriptionGoods', 'ConsignorStreetAndNr', 'ConsignorCity', 'ConsignorPostcode',
                                'ConsignorCountry', 'ConsigneeName', 'ConsigneeStreetAndNr', 'ConsigneePostcode',
                                'ConsigneeCity', 'ConsigneeCountryCode', 'AirWayBill', 'IOSS', 'CountryOriginCode',
-                               'ConsigneeNameID', 'Box Number', 'Dsk']
+                               'ConsigneeNameID', 'Box Number', 'Dsk', "C127(M-PID)","C128(NS-PID)","C129(S-PID)","Y081","GRN","ATR","Y126"]
 
         self.external_tools = [
             {
@@ -1282,64 +1282,226 @@ class MainWindow(QMainWindow):
                     for section in ["goodsitem previous document", "goodshipment previous document"]:
                         if input_information.get(section):
                             for item in input_information[section]:
-                                if str(item.get("reference number", "")).strip() == "1":
+                                for column in self.list_fixed_key:
+                                    if normalize(item.get("reference number", "")) == normalize(column):
+                                        item["reference number"] = column
+                                    if normalize(item.get("goodsItem identifier", "")) == normalize(column):
+                                        item["goodsItem identifier"] = column
+                                if normalize(item.get("reference number", "")) == "dsk":
                                     if "Dsk" not in input_file.columns:
                                         self.show_error(
-                                            f"{section} default reading rule requires the Dsk column. "
-                                            "Please remove related content if missing.")
+                                            f"{section} rule requires the N337(Dsk) column. "
+                                            "Please remove related configuration if missing.")
                                         return False
                                     if input_file["Dsk"].replace('', pd.NA).isna().any():
                                         self.show_error(
-                                            f"{section} previous document default reading rule requires the Dsk column, "
-                                            f"but it is empty. Please remove related content.")
+                                            f"{section} rule requires the N337(Dsk) column, "
+                                            "but some rows contain empty values. Please check.")
+                                        return False
+
+                                if normalize(item.get("goodsItem identifier", "")) == "goodsitemnumber":
+                                    if "GoodsItemNumber" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the GoodsItemNumber column. "
+                                            "Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["GoodsItemNumber"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the GoodsItemNumber column, "
+                                            "but some rows contain empty values. Please check.")
+                                        return False
+
+
+                    # GRN is the guarantee number supplied by the GRHUB configuration.
+                    grhub_count = 0
+                    for section in ["goodsitem additional information", "goodshipment additional information"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                for column in self.list_fixed_key:
+                                    if normalize(item.get("text", "")) == normalize(column):
+                                        item["text"] = column
+                                if str(item.get("code(CL239)", "")).strip() == "GRHUB":
+                                    grhub_count += 1
+                                if normalize(item.get("text", "")) == "grn":
+                                    if "GRN" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the GRHUB(GRN) column. "
+                                            "Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["GRN"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the GRHUB(GRN) column, "
+                                            "but some rows contain empty values. Please check.")
                                         return False
 
                     # Check goodsitem supporting document & goodshipment supporting document
+                    c127_count = 0
+                    c128_count = 0
+                    c129_count = 0
                     for section in ["goodsitem supporting document", "goodshipment supporting document"]:
                         if input_information.get(section):
                             for item in input_information[section]:
-                                if str(item.get("reference number", "")).strip() == "1":
+                                for column in self.list_fixed_key:
+                                    if normalize(item.get("reference number", "")) == normalize(column):
+                                        item["reference number"] = column
+                                # Count the code even when its reference number is a fixed value.
+                                supporting_document_type = str(item.get("type(CL213)", "")).strip()
+                                if supporting_document_type == "C127":
+                                    c127_count += 1
+                                if supporting_document_type == "C128":
+                                    c128_count += 1
+                                if supporting_document_type == "C129":
+                                    c129_count += 1
+                                if normalize(item.get("reference number", "")) == "invoicenumber":
                                     if "InvoiceNumber" not in input_file.columns:
                                         self.show_error(
-                                            f"{section} default reading rule requires the InvoiceNumber column. "
-                                            f"Please remove related content if missing.")
+                                            f"{section} rule requires the N935(InvoiceNumber) column. "
+                                            f"Please remove related configuration if missing.")
                                         return False
                                     if input_file["InvoiceNumber"].replace('', pd.NA).isna().any():
                                         self.show_error(
-                                            f"{section} default reading rule requires the InvoiceNumber column, "
-                                            f"but it is empty. Please remove related content.")
+                                            f"{section} rule requires the N935(InvoiceNumber) column, "
+                                            f"but some rows contain empty values. Please check.")
                                         return False
+                                if normalize(item.get("reference number", "")) == "atr":
+                                    if "ATR" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the ATR column. "
+                                            f"Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["ATR"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the ATR column, "
+                                            f"but some rows contain empty values. Please check.")
+                                        return False
+                                if normalize(item.get("reference number", "")) == "c127(m-pid)":
+                                    if "C127(M-PID)" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the C127(M-PID) column. "
+                                            f"Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["C127(M-PID)"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the C127(M-PID) column, "
+                                            f"but some rows contain empty values. Please check.")
+                                        return False
+                                if normalize(item.get("reference number", "")) == "c128(ns-pid)":
+                                    if "C128(NS-PID)" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the C128(NS-PID) column. "
+                                            f"Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["C128(NS-PID)"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the C128(NS-PID) column, "
+                                            f"but some rows contain empty values. Please check.")
+                                        return False
+                                if normalize(item.get("reference number", "")) == "c129(s-pid)":
+                                    if "C129(S-PID)" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the C129(S-PID) column. "
+                                            f"Please remove related configuration if missing.")
+                                        return False
+                                    # C129 cells may be empty; the referenced column must still exist.
+
+                    # Check goodsitem additional reference & goodshipment additional reference
+                    y081_count = 0
+                    y126_count = 0
+                    for section in ["goodsitem additional reference", "goodshipment additional reference"]:
+                        if input_information.get(section):
+                            for item in input_information[section]:
+                                for column in self.list_fixed_key:
+                                    if normalize(item.get("reference number", "")) == normalize(column):
+                                        item["reference number"] = column
+                                # A fixed Y081 explanation also counts as a configured Y081.
+                                if str(item.get("type(CL380)", "")).strip() == "Y081":
+                                    y081_count += 1
+                                if str(item.get("type(CL380)", "")).strip() == "Y126":
+                                    y126_count += 1
+                                if normalize(item.get("reference number", "")) == "y081":
+                                    if "Y081" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the Y081 column. "
+                                            f"Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["Y081"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the Y081 column, "
+                                            f"but some rows contain empty values. Please check.")
+                                        return False
+
+                                if normalize(item.get("reference number", "")) == "y126":
+                                    if "Y126" not in input_file.columns:
+                                        self.show_error(
+                                            f"{section} rule requires the Y126 column. "
+                                            "Please remove related configuration if missing.")
+                                        return False
+                                    if input_file["Y126"].replace('', pd.NA).isna().any():
+                                        self.show_error(
+                                            f"{section} rule requires the Y126 column, "
+                                            "but some rows contain empty values. Please check.")
+                                        return False
+
+                    # GRHUB, C127, C128, C129 and Y081 must all be configured.
+                    if not grhub_count:
+                        self.show_error(
+                            "GRHUB(GRN) configuration is required. "
+                            "Please configure GRHUB(GRN) related configuration.")
+                        return False
+                    if not c127_count:
+                        self.show_error(
+                            "C127(M-PID) configuration is required. "
+                            "Please configure C127(M-PID) related configuration.")
+                        return False
+                    if not c128_count:
+                        self.show_error(
+                            "C128(NS-PID) configuration is required. "
+                            "Please configure C128(NS-PID) related configuration.")
+                        return False
+                    if not c129_count:
+                        self.show_error(
+                            "C129(S-PID) configuration is required. "
+                            "Please configure C129(S-PID) related configuration.")
+                        return False
+                    if not y081_count:
+                        self.show_error(
+                            "Y081 configuration is required. "
+                            "Please configure Y081 related configuration.")
+                        return False
+                    if not y126_count:
+                        self.show_error(
+                            "Y126 configuration is required. "
+                            "Please configure Y126 related configuration.")
+                        return False
 
                     # Check goodshipment/goodsitem transport document reference=1
                     for section in ["goodshipment transport document", "goodsitem transport document"]:
                         if input_information.get(section):
                             for item in input_information[section]:
-                                if str(item.get("reference number", "")).strip() == "1":
+                                for column in self.list_fixed_key:
+                                    if normalize(item.get("reference number", "")) == normalize(column):
+                                        item["reference number"] = column
+                                if normalize(item.get("reference number", "")) == "airwaybill":
                                     if "AirWayBill" not in input_file.columns:
                                         self.show_error(
-                                            f"{section} default reading rule requires the AirWayBill column. Please "
-                                            f"remove related content if missing.")
+                                            f"{section} rule requires the N740(AirWayBill) column."
+                                            f"Please remove related configuration if missing.")
                                         return False
                                     if input_file["AirWayBill"].replace('', pd.NA).isna().any():
                                         self.show_error(
-                                            f"{section} default reading rule requires the AirWayBill column, but it "
-                                            f"is empty. Please remove related content.")
+                                            f"{section} rule requires the N740(AirWayBill) column,"
+                                            f"but some rows contain empty values. Please check.")
                                         return False
-
-                    # Check goodshipment/goodsitem transport document reference=2
-                    for section in ["goodshipment transport document", "goodsitem transport document"]:
-                        if input_information.get(section):
-                            for item in input_information[section]:
-                                if str(item.get("reference number", "")).strip() == "2":
+                                if normalize(item.get("reference number", "")) == "boxnumber":
                                     if "Box Number" not in input_file.columns:
                                         self.show_error(
-                                            f"{section} default reading rule requires the Box Number column. Please "
-                                            f"remove related content if missing.")
+                                            f"{section} rule requires the N703(Box Number) column."
+                                            f"Please remove related configuration if missing.")
                                         return False
                                     if input_file["Box Number"].replace('', pd.NA).isna().any():
                                         self.show_error(
-                                            f"{section} default reading rule requires the Box Number column, but it "
-                                            f"is empty. Please remove related content.")
+                                            f"{section} rule requires the N703(Box Number) column,"
+                                            f"but some rows contain empty values. Please check.")
                                         return False
                 except Exception as e:
                     self.show_error("No such file.")

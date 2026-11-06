@@ -1,3 +1,6 @@
+from utils.common import apply_dialog_typography
+from utils.common import setup_dialog_size
+from PyQt5.QtWidgets import QLayout
 import sys
 from PyQt5.QtWidgets import QApplication, QDialog, QPushButton, QLabel, QFileDialog, QDialogButtonBox, QFormLayout, \
     QLineEdit, QWidget, QVBoxLayout, QScrollArea, QHBoxLayout, QSizePolicy
@@ -115,17 +118,23 @@ keys_input_information = [
 
 text_all_line_edits = ["PL443020", "523026291", "A", "", "PL521398303500000", "", "", "", "",
                        [{'name': 'Tomasz Zabrocki', 'phoneNumber': '+48698156094',
-                         'eMailAddress': 'Tomasz.Zabrocki@gmail.com'}], "", "3",
-                       [{'name': 'Tomasz Zabrocki', 'phoneNumber': '+48698156094',
-                         'eMailAddress': 'Tomasz.Zabrocki@gmail.com'}],
+                         'eMailAddress': 'Tomasz.Zabrocki@gmail.com'}], "", "",
+                       [],
                        "", "B", "Y",
                        "", "PLTST441000200001", "", "", "", "", "", "", "", "",
                        "", "", "", "",
-                       [{'reference number': '1', 'type(CL214)': 'N337', 'goodsItem identifier': '2'}], [],
-                       [{'reference number': '1', 'type(CL213)': 'N380'}], [],
-                       [{'reference number': '1', 'type(CL754)': 'N740'}, {'reference number': '2', 'type(CL754)': 'N703'}],
+                       [{'reference number': 'Dsk', 'type(CL214)': 'N337', 'goodsItem identifier': 'GoodsItemNumber'}],
+                       [{'code(CL239)':'GRHUB', 'text': '23PL12345AG123456'}],
+                       [], [],
+                       [{'reference number': 'AirWayBill', 'type(CL754)': 'N740'}, {'reference number': 'Box Number', 'type(CL754)': 'N703'}],
                        [{'role(CL149)': 'FR5'}], "", "",
-                       [{'additional procedure(CL457)': 'C07'}, {'additional procedure(CL457)': 'F48'}], [], [], [], [],
+                       [{'additional procedure(CL457)': 'F48'}], [], [],
+                       [{'reference number': 'InvoiceNumber', 'type(CL213)': 'N935'},{'reference number': 'ATR', 'type(CL213)': 'N018'},{'reference number': 'C127(M-PID)', 'type(CL213)': 'C127'},{'reference number': 'C128(NS-PID)', 'type(CL213)': 'C128'},{'reference number': 'C129(S-PID)', 'type(CL213)': 'C129'}],
+                       [
+                           {'reference number': 'Produkt nie posiada standardowego identyfikatora producenta',
+                            'type(CL380)': 'Y081'},
+                           {'reference number': 'Y126', 'type(CL380)': 'Y126'}
+                       ],
                        []]
 
 # text_all_line_edits = ["PL443020", "523026291", "A", "", "PL521398303500000", "", "", "", "",
@@ -223,7 +232,7 @@ class CreateSADs(QDialog):
                          'ConsignorStreetAndNr', 'ConsignorCity', 'ConsignorPostcode', 'ConsignorCountry',
                          'ConsigneeName', 'ConsigneeStreetAndNr', 'ConsigneePostcode', 'ConsigneeCity',
                          'ConsigneeCountryCode', 'AirWayBill', 'IOSS', 'CountryOriginCode',
-                         'ConsigneeNameID', 'Box Number', 'Dsk']
+                         'ConsigneeNameID', 'Box Number','Dsk',"C127(M-PID)","C128(NS-PID)","C129(S-PID)","Y081","GRN","ATR","Y126"]
         self.list_label = []
         self.list_editor = []
 
